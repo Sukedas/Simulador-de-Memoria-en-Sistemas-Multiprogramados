@@ -590,3 +590,5 @@ document.addEventListener('DOMContentLoaded', function() {
     // Aplicar configuración inicial
     applyConfiguration();
 });
+
+// Probando GIT

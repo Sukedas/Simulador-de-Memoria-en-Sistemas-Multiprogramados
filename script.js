@@ -169,14 +169,46 @@ class MemoryManager {
         });
     }
 
+    // Nuevo método en MemoryManager para liberar las particiones de los procesos 
+    isAllocated(programId) {
+    return this.partitions.some(p => p.program && p.program.id === programId);
+    }
+
+    // updateAll() {
+    //     for (let time = 1; time <= 6; time++) {
+    //         this.visualizeMemory(time);
+    //         this.updateMemoryTable(time);
+    //     }
+    //     this.updateStats();
+    //     this.updateProgramList();
+    // }
     updateAll() {
         for (let time = 1; time <= 6; time++) {
+            // 1) Liberar automáticamente los procesos que ya no están activos en este 'time'
+            programs.forEach(prog => {
+            if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
+                this.deallocate(prog.id);
+            }
+            });
+
+            // 2) Asignar procesos que sí están activos y aún no asignados
+            programs.forEach(prog => {
+            if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
+                this.allocate(prog);
+            }
+            });
+
+            // 3) Renderizar visualización y tabla para este instante
             this.visualizeMemory(time);
             this.updateMemoryTable(time);
         }
+        // Actualizar estadísticas y lista de programas
         this.updateStats();
         this.updateProgramList();
     }
+
+    
+
 }
 
 // Particiones estáticas de tamaño fijo

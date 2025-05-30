@@ -16,7 +16,7 @@ class MemoryManager {
     constructor(allocationAlgorithm = 'first-fit') {
         this.allocationAlgorithm = allocationAlgorithm;
         this.partitions = [];
-        this.initializeMemory();
+        // this.initializeMemory();
     }
     
     initializeMemory() {}
@@ -595,8 +595,8 @@ function applyConfiguration() {
     const currentPrograms = [...programs];
     programs = [];
     currentPrograms.forEach(program => {
-        memoryManager.allocate(program);
-        programs.push(program);
+    memoryManager.allocate(program);
+    programs.push(program);
     });
 
     memoryManager.updateAll();

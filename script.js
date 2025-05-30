@@ -1,16 +1,14 @@
 // Constantes
 const TOTAL_MEMORY = 16 * 1024 * 1024; // 16 MiB en bytes
-const TOTAL_MEMORY_KB = 16 * 1024; // 16 MiB en KB
 
-// Estado global
 let memoryManager = null;
 let programs = [];
 const predefinedPrograms = [
-    { name: "Navegador", size: 1024 },
-    { name: "Editor de Texto", size: 512 },
-    { name: "Reproductor Multimedia", size: 2048 },
-    { name: "Juego", size: 4096 },
-    { name: "Compilador", size: 1536 }
+    { name: "Navegador", size: 1024, startTime: 1, endTime: 2 },
+    { name: "Editor de Texto", size: 512, startTime: 2, endTime: 3 },
+    { name: "Reproductor Multimedia", size: 869, startTime: 1, endTime: 4 },
+    { name: "Juego", size: 365, startTime: 4, endTime: 6 },
+    { name: "Compilador", size: 1002, startTime: 3, endTime: 5 }
 ];
 
 // Clase base para administradores de memoria
@@ -51,35 +49,6 @@ class MemoryManager {
         });
     }
     
-    visualizeMemory() {
-        const visualization = document.getElementById('memoryVisualization');
-        visualization.innerHTML = '';
-        
-        this.partitions.forEach(partition => {
-            const block = document.createElement('div');
-            block.className = 'memory-block';
-            
-            const startPercent = (partition.start / TOTAL_MEMORY) * 100;
-            const endPercent = (partition.end / TOTAL_MEMORY) * 100;
-            const heightPercent = endPercent - startPercent;
-            
-            block.style.bottom = `${startPercent}%`;
-            block.style.height = `${heightPercent}%`;
-            
-            if (partition.program) {
-                block.style.backgroundColor = this.getProgramColor(partition.program.id);
-                block.title = `${partition.program.name} (${partition.program.size} KB)`;
-                block.textContent = `${partition.program.name} (${(partition.end - partition.start + 1)/1024} KB)`;
-            } else {
-                block.style.backgroundColor = '#ddd';
-                block.title = `Bloque libre (${(partition.end - partition.start + 1)/1024} KB)`;
-                block.textContent = `Libre (${(partition.end - partition.start + 1)/1024} KB)`;
-            }
-            
-            visualization.appendChild(block);
-        });
-    }
-    
     getProgramColor(programId) {
         const colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', 
                         '#1abc9c', '#d35400', '#34495e', '#7f8c8d', '#27ae60'];
@@ -99,8 +68,8 @@ class MemoryManager {
             <p><strong>Memoria total:</strong> ${totalMemoryKB} KB</p>
             <p><strong>Memoria usada:</strong> ${usedMemoryKB} KB (${(usedMemoryKB/totalMemoryKB*100).toFixed(2)}%)</p>
             <p><strong>Memoria libre:</strong> ${freeMemoryKB} KB (${(freeMemoryKB/totalMemoryKB*100).toFixed(2)}%)</p>
-            <p><strong>Fragmentación externa:</strong> ${fragmentation.external} KB</p>
-            <p><strong>Fragmentación interna:</strong> ${fragmentation.internal} KB</p>
+            <p><strong>Fragmentación externa:</strong> ${fragmentation.external.toFixed(2)} KB</p>
+            <p><strong>Fragmentación interna:</strong> ${fragmentation.internal.toFixed(2)} KB</p>
         `;
     }
     
@@ -121,36 +90,6 @@ class MemoryManager {
         return { external, internal };
     }
     
-    updateMemoryTable() {
-        const tableBody = document.querySelector('#memoryTable tbody');
-        tableBody.innerHTML = '';
-        
-        const data = this.getMemoryTableData();
-        data.forEach(row => {
-            const tr = document.createElement('tr');
-            
-            const startAddr = `0x${row.start.toString(16).padStart(6, '0').toUpperCase()}`;
-            const endAddr = `0x${row.end.toString(16).padStart(6, '0').toUpperCase()}`;
-            
-            tr.innerHTML = `
-                <td>${startAddr}</td>
-                <td>${endAddr}</td>
-                <td>${row.size}</td>
-                <td>${row.status}</td>
-                <td>${row.program}</td>
-            `;
-            
-            tableBody.appendChild(tr);
-        });
-    }
-    
-    updateAll() {
-        this.visualizeMemory();
-        this.updateStats();
-        this.updateMemoryTable();
-        this.updateProgramList();
-    }
-    
     updateProgramList() {
         const programList = document.getElementById('programList');
         programList.innerHTML = '';
@@ -161,7 +100,7 @@ class MemoryManager {
             programTag.style.backgroundColor = this.getProgramColor(program.id);
             
             programTag.innerHTML = `
-                <span>${program.name} (${program.size} KB)</span>
+                <span>${program.name} (${program.size} KB) [Tiempos: ${program.startTime} - ${program.endTime}]</span>
                 <button data-id="${program.id}">X</button>
             `;
             
@@ -174,6 +113,86 @@ class MemoryManager {
             
             programList.appendChild(programTag);
         });
+
+        // Actualizar matriz
+        updateProgramTimeMatrix();
+    }
+
+    visualizeMemory(time) {
+        const visualization = document.getElementById(`memoryVisualization${time}`);
+        if (!visualization) return;
+        visualization.innerHTML = '';
+        
+        this.partitions.forEach(partition => {
+            const block = document.createElement('div');
+            block.className = 'memory-block';
+            
+            const startPercent = (partition.start / TOTAL_MEMORY) * 100;
+            const endPercent = (partition.end / TOTAL_MEMORY) * 100;
+            const heightPercent = endPercent - startPercent;
+            
+            block.style.bottom = `${startPercent}%`;
+            block.style.height = `${heightPercent}%`;
+            
+            if (partition.program && time >= partition.program.startTime && time <= partition.program.endTime) {
+                block.style.backgroundColor = this.getProgramColor(partition.program.id);
+                block.title = `${partition.program.name} (${partition.program.size} KB)`;
+                block.textContent = `${partition.program.name} (${(partition.end - partition.start + 1)/1024} KB)`;
+            } else {
+                block.style.backgroundColor = '#ddd';
+                block.title = `Bloque libre (${(partition.end - partition.start + 1)/1024} KB)`;
+                block.textContent = `Libre (${(partition.end - partition.start + 1)/1024} KB)`;
+            }
+            
+            visualization.appendChild(block);
+        });
+    }
+
+    updateMemoryTable(time) {
+        const tableBody = document.querySelector(`#memoryTable${time} tbody`);
+        if (!tableBody) return;
+        tableBody.innerHTML = '';
+        
+        const data = this.getMemoryTableData();
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            
+            const startAddr = `0x${row.start.toString(16).padStart(6, '0').toUpperCase()}`;
+            const endAddr = `0x${row.end.toString(16).padStart(6, '0').toUpperCase()}`;
+            
+            let status = row.status;
+            let programName = row.program;
+            
+            // Comprobar si el programa está activo en este tiempo
+            const progObj = programs.find(p => p.name === programName);
+            if (progObj) {
+                if (time >= progObj.startTime && time <= progObj.endTime) {
+                    status = "Ocupado";
+                } else {
+                    status = "Libre";
+                    programName = "-";
+                }
+            }
+            
+            tr.innerHTML = `
+                <td>${startAddr}</td>
+                <td>${endAddr}</td>
+                <td>${row.size}</td>
+                <td>${status}</td>
+                <td>${programName}</td>
+            `;
+            
+            tableBody.appendChild(tr);
+        });
+    }
+
+    updateAll() {
+        for (let time = 1; time <= 6; time++) {
+            this.visualizeMemory(time);
+            this.updateMemoryTable(time);
+        }
+        this.updateStats();
+        this.updateProgramList();
     }
 }
 
@@ -215,14 +234,8 @@ class FixedSizeMemoryManager extends MemoryManager {
         
         switch (this.allocationAlgorithm) {
             case 'first-fit':
-                partitionToAllocate = this.partitions.find(p => !p.program);
-                break;
             case 'best-fit':
-                // En tamaño fijo, todos los bloques son iguales
-                partitionToAllocate = this.partitions.find(p => !p.program);
-                break;
             case 'worst-fit':
-                // En tamaño fijo, todos los bloques son iguales
                 partitionToAllocate = this.partitions.find(p => !p.program);
                 break;
         }
@@ -302,13 +315,11 @@ class VariableSizeMemoryManager extends MemoryManager {
                 partitionToAllocate = candidates[0];
                 break;
             case 'best-fit':
-                candidates.sort((a, b) => 
-                    (a.end - a.start + 1) - (b.end - b.start + 1));
+                candidates.sort((a, b) => (a.end - a.start) - (b.end - b.start));
                 partitionToAllocate = candidates[0];
                 break;
             case 'worst-fit':
-                candidates.sort((a, b) => 
-                    (b.end - b.start + 1) - (a.end - a.start + 1));
+                candidates.sort((a, b) => (b.end - b.start) - (a.end - a.start));
                 partitionToAllocate = candidates[0];
                 break;
         }
@@ -352,16 +363,12 @@ class DynamicMemoryManager extends MemoryManager {
         
         let candidates = [];
         
-        // Buscar todos los huecos que puedan alojar el programa
         for (let i = 0; i < this.partitions.length; i++) {
             const partition = this.partitions[i];
             if (!partition.program) {
                 const partitionSize = partition.end - partition.start + 1;
                 if (partitionSize >= sizeBytes) {
-                    candidates.push({
-                        index: i,
-                        size: partitionSize
-                    });
+                    candidates.push({index: i, size: partitionSize});
                 }
             }
         }
@@ -391,7 +398,6 @@ class DynamicMemoryManager extends MemoryManager {
             const partitionIndex = selectedCandidate.index;
             const partition = this.partitions[partitionIndex];
             
-            // Dividir la partición si hay espacio sobrante
             if ((partition.end - partition.start + 1) > sizeBytes) {
                 const newPartition = {
                     start: partition.start + sizeBytes,
@@ -404,7 +410,6 @@ class DynamicMemoryManager extends MemoryManager {
                 
                 this.partitions.splice(partitionIndex + 1, 0, newPartition);
             } else {
-                // Usar toda la partición si encaja perfectamente
                 partition.program = program;
             }
             
@@ -419,10 +424,7 @@ class DynamicMemoryManager extends MemoryManager {
         if (partitionIndex === -1) return false;
         
         this.partitions[partitionIndex].program = null;
-        
-        // Fusionar con particiones adyacentes libres
         this.mergeAdjacentFreePartitions();
-        
         return true;
     }
     
@@ -434,7 +436,7 @@ class DynamicMemoryManager extends MemoryManager {
             if (!current.program && !next.program) {
                 current.end = next.end;
                 this.partitions.splice(i + 1, 1);
-                i--; // Revisar nuevamente esta posición
+                i--;
             }
         }
     }
@@ -449,7 +451,6 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
     allocate(program) {
         const result = super.allocate(program);
         if (!result) {
-            // Intentar compactación y luego asignar
             this.compact();
             return super.allocate(program);
         }
@@ -457,12 +458,9 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
     }
     
     compact() {
-        // Mover todos los programas al inicio de la memoria
         let currentAddress = 0;
         const newPartitions = [];
-        let freeSpaceStart = null;
         
-        // Primero, agregar todos los programas ocupados
         for (const partition of this.partitions) {
             if (partition.program) {
                 const size = partition.end - partition.start + 1;
@@ -475,8 +473,7 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
             }
         }
         
-        // Luego agregar el espacio libre restante como una sola partición
-        if (currentAddress < TOTAL_MEMORY - 1) {
+        if (currentAddress < TOTAL_MEMORY) {
             newPartitions.push({
                 start: currentAddress,
                 end: TOTAL_MEMORY - 1,
@@ -488,11 +485,54 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
     }
 }
 
-// Funciones de inicialización y control
+// Funciones principales para interacción y configuración
+
+function addProgram() {
+    const size = parseInt(document.getElementById('programSize').value);
+    const startTime = parseInt(document.getElementById('startTime').value);
+    const endTime = parseInt(document.getElementById('endTime').value);
+
+    if (isNaN(size) || isNaN(startTime) || isNaN(endTime)) return;
+    if (startTime < 1 || startTime > 6 || endTime < 1 || endTime > 6 || endTime < startTime) {
+        alert("Tiempos inválidos (1-6, y fin >= inicio)");
+        return;
+    }
+
+    const programId = programs.length > 0 ? Math.max(...programs.map(p => p.id)) + 1 : 1;
+    const programName = `Programa ${programId}`;
+
+    const program = {
+        id: programId,
+        name: programName,
+        size: size,
+        startTime: startTime,
+        endTime: endTime
+    };
+
+    if (memoryManager.allocate(program)) {
+        programs.push(program);
+        memoryManager.updateAll();
+    }
+}
+
+function addRandomProgram() {
+    const randomSize = Math.floor(Math.random() * 4096) + 128;
+    const start = Math.floor(Math.random() * 6) + 1;
+    const end = Math.floor(Math.random() * 6) + 1;
+    const startTime = Math.min(start, end);
+    const endTime = Math.max(start, end);
+
+    document.getElementById('programSize').value = randomSize;
+    document.getElementById('startTime').value = startTime;
+    document.getElementById('endTime').value = endTime;
+
+    addProgram();
+}
+
 function applyConfiguration() {
     const memoryType = document.getElementById('memoryType').value;
     const algorithm = document.getElementById('allocationAlgorithm').value;
-    
+
     switch (memoryType) {
         case 'fixed':
             const partitionSize = parseInt(document.getElementById('partitionSize').value);
@@ -511,53 +551,16 @@ function applyConfiguration() {
             memoryManager = new DynamicCompactMemoryManager(algorithm);
             break;
     }
-    
-    // Reasignar los programas existentes
+
+    // Reasignar programas existentes (recalcula las asignaciones)
     const currentPrograms = [...programs];
     programs = [];
-    
     currentPrograms.forEach(program => {
         memoryManager.allocate(program);
         programs.push(program);
     });
-    
+
     memoryManager.updateAll();
-}
-
-function addProgram() {
-    const size = parseInt(document.getElementById('programSize').value);
-    if (isNaN(size)) return;
-    
-    const programId = programs.length > 0 ? Math.max(...programs.map(p => p.id)) + 1 : 1;
-    const programName = `Programa ${programId}`;
-    
-    const program = {
-        id: programId,
-        name: programName,
-        size: size
-    };
-    
-    if (memoryManager.allocate(program)) {
-        programs.push(program);
-        memoryManager.updateAll();
-    }
-}
-
-function addRandomProgram() {
-    const randomSize = Math.floor(Math.random() * 4096) + 128; // Entre 128 KB y 4224 KB
-    document.getElementById('programSize').value = randomSize;
-    addProgram();
-}
-
-function addPredefinedPrograms() {
-    predefinedPrograms.forEach((prog, index) => {
-        const program = {
-            id: index + 1,
-            name: prog.name,
-            size: prog.size
-        };
-        programs.push(program);
-    });
 }
 
 function removeAllPrograms() {
@@ -568,9 +571,8 @@ function removeAllPrograms() {
     memoryManager.updateAll();
 }
 
-// Inicialización de la página
+// Inicialización de la página y eventos
 document.addEventListener('DOMContentLoaded', function() {
-    // Configurar eventos de los controles
     document.getElementById('memoryType').addEventListener('change', function() {
         const type = this.value;
         document.getElementById('fixedParams').style.display = 
@@ -578,15 +580,102 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('variableParams').style.display = 
             (type === 'variable') ? 'block' : 'none';
     });
-    
+
     document.getElementById('applyConfig').addEventListener('click', applyConfiguration);
     document.getElementById('addProgram').addEventListener('click', addProgram);
     document.getElementById('addRandomProgram').addEventListener('click', addRandomProgram);
     document.getElementById('removeAll').addEventListener('click', removeAllPrograms);
-    
-    // Agregar programas predefinidos
-    addPredefinedPrograms();
-    
-    // Aplicar configuración inicial
+
+    // Añadir programas predefinidos
+    predefinedPrograms.forEach((prog, index) => {
+        const program = {
+            id: index + 1,
+            name: prog.name,
+            size: prog.size,
+            startTime: prog.startTime || 1,
+            endTime: prog.endTime || 6
+        };
+        programs.push(program);
+    });
+
     applyConfiguration();
 });
+
+
+function updateProgramTimeMatrix() {
+    const container = document.getElementById('programTimeMatrix');
+    container.innerHTML = ''; // limpiar
+    
+    if (programs.length === 0) {
+        container.textContent = "No hay programas para mostrar.";
+        return;
+    }
+    
+    // Crear tabla
+    const table = document.createElement('table');
+    table.style.borderCollapse = 'collapse';
+    table.style.width = '100%';
+    table.style.textAlign = 'center';
+    table.style.fontSize = '12px';
+    
+    // Crear encabezado de columnas (Tiempos 1 a 6)
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    
+    const emptyTh = document.createElement('th');
+    emptyTh.textContent = "Programa \\ Tiempo";
+    emptyTh.style.border = '1px solid #ccc';
+    emptyTh.style.padding = '4px';
+    headerRow.appendChild(emptyTh);
+    
+    for (let t = 1; t <= 6; t++) {
+        const th = document.createElement('th');
+        th.textContent = t;
+        th.style.border = '1px solid #ccc';
+        th.style.padding = '4px';
+        headerRow.appendChild(th);
+    }
+    
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // Crear cuerpo con filas por programa
+    const tbody = document.createElement('tbody');
+    
+    programs.forEach(prog => {
+        const tr = document.createElement('tr');
+        
+        // Columna nombre programa
+        const nameTd = document.createElement('td');
+        nameTd.textContent = prog.name;
+        nameTd.style.border = '1px solid #ccc';
+        nameTd.style.padding = '4px';
+        nameTd.style.fontWeight = 'bold';
+        nameTd.style.textAlign = 'left';
+        tr.appendChild(nameTd);
+        
+        // Columnas tiempos 1-6
+        for (let time = 1; time <= 6; time++) {
+            const td = document.createElement('td');
+            td.style.border = '1px solid #ccc';
+            td.style.padding = '8px';
+            
+            // Si el programa está activo en este tiempo, coloreamos
+            if (time >= prog.startTime && time <= prog.endTime) {
+                td.style.backgroundColor = memoryManager.getProgramColor(prog.id);
+                td.textContent = '●';  // Puedes cambiar por algo más visual
+                td.style.color = '#fff';
+            } else {
+                td.textContent = '';
+            }
+            
+            tr.appendChild(td);
+        }
+        
+        tbody.appendChild(tr);
+    });
+    
+    table.appendChild(tbody);
+    container.appendChild(table);
+}
+

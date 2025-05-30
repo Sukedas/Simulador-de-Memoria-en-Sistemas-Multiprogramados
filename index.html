@@ -54,12 +54,8 @@
                     <input type="number" id="programSize" min="1" value="512" />
                 </div>
                 <div>
-                    <label for="startTime">Tiempo de inicio (1-6):</label>
-                    <input type="number" id="startTime" min="1" max="6" value="1" />
-                </div>
-                <div>
-                    <label for="endTime">Tiempo de fin (1-6):</label>
-                    <input type="number" id="endTime" min="1" max="6" value="1" />
+                    <label for="activeTimesInput">Tiempos activos (ej: 1,3,6):</label>
+                    <input type="text" id="activeTimesInput" placeholder="1,3,6" />
                 </div>
                 <button id="addProgram">Agregar Programa</button>
                 <button id="addRandomProgram">Agregar Programa Aleatorio</button>
@@ -71,18 +67,17 @@
             </div>
         </div>
 
-        <div class="panel">
+        <div class="panel" style="flex-basis: 100%;">
             <h2>Matriz de Actividad de Programas</h2>
             <div id="programTimeMatrix" style="overflow-x:auto;"></div>
+            </div>
         </div>
-
-
 
         <div class="panel" style="flex-basis: 100%;">
             <h2>Visualización de Memoria (16 MiB)</h2>
             <div id="memoryStats"></div>
 
-            <!-- Seis visualizaciones y tablas, una por cada tiempo -->
+            <!-- Visualizaciones y tablas para tiempos 1 a 6 -->
             <div>
                 <h3>Tiempo 1</h3>
                 <div id="memoryVisualization1" class="memory-visualization"></div>
@@ -180,7 +175,8 @@
                 </table>
             </div>
         </div>
-    </div>
+
+        
 
     <script src="script.js"></script>
 </body>

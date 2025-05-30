@@ -4,11 +4,11 @@ const TOTAL_MEMORY = 16 * 1024 * 1024; // 16 MiB en bytes
 let memoryManager = null;
 let programs = [];
 const predefinedPrograms = [
-    { name: "Navegador", size: 1024, startTime: 1, endTime: 2 },
-    { name: "Editor de Texto", size: 512, startTime: 2, endTime: 3 },
-    { name: "Reproductor Multimedia", size: 869, startTime: 1, endTime: 4 },
-    { name: "Juego", size: 365, startTime: 4, endTime: 6 },
-    { name: "Compilador", size: 1002, startTime: 3, endTime: 5 }
+    { name: "Navegador", size: 1024, activeTimes: [1,3,6] },
+    { name: "Editor de Texto", size: 512, activeTimes: [2,4,5] },
+    { name: "Reproductor Multimedia", size: 2048, activeTimes: [1,2,3,4,5,6] },
+    { name: "Juego", size: 4096, activeTimes: [4,5,6] },
+    { name: "Compilador", size: 1536, activeTimes: [3,4] }
 ];
 
 // Clase base para administradores de memoria
@@ -19,23 +19,10 @@ class MemoryManager {
         this.initializeMemory();
     }
     
-    initializeMemory() {
-        // Implementado por subclases
-    }
-    
-    allocate(program) {
-        // Implementado por subclases
-        return false;
-    }
-    
-    deallocate(programId) {
-        // Implementado por subclases
-        return false;
-    }
-    
-    compact() {
-        // Implementado por subclases que lo necesiten
-    }
+    initializeMemory() {}
+    allocate(program) { return false; }
+    deallocate(programId) { return false; }
+    compact() {}
     
     getMemoryTableData() {
         return this.partitions.map(partition => {
@@ -77,12 +64,10 @@ class MemoryManager {
         let external = 0;
         let internal = 0;
         
-        // Fragmentación externa: suma de todos los bloques libres
         external = this.partitions
             .filter(p => !p.program)
             .reduce((sum, p) => sum + (p.end - p.start + 1) / 1024, 0);
         
-        // Fragmentación interna (solo para particiones fijas)
         internal = this.partitions
             .filter(p => p.program && p.fixedSize)
             .reduce((sum, p) => sum + (p.fixedSize - p.program.size), 0);
@@ -100,7 +85,7 @@ class MemoryManager {
             programTag.style.backgroundColor = this.getProgramColor(program.id);
             
             programTag.innerHTML = `
-                <span>${program.name} (${program.size} KB) [Tiempos: ${program.startTime} - ${program.endTime}]</span>
+                <span>${program.name} (${program.size} KB) [Tiempos: ${program.activeTimes.join(', ')}]</span>
                 <button data-id="${program.id}">X</button>
             `;
             
@@ -113,8 +98,7 @@ class MemoryManager {
             
             programList.appendChild(programTag);
         });
-
-        // Actualizar matriz
+        
         updateProgramTimeMatrix();
     }
 
@@ -134,7 +118,7 @@ class MemoryManager {
             block.style.bottom = `${startPercent}%`;
             block.style.height = `${heightPercent}%`;
             
-            if (partition.program && time >= partition.program.startTime && time <= partition.program.endTime) {
+            if (partition.program && partition.program.activeTimes.includes(time)) {
                 block.style.backgroundColor = this.getProgramColor(partition.program.id);
                 block.title = `${partition.program.name} (${partition.program.size} KB)`;
                 block.textContent = `${partition.program.name} (${(partition.end - partition.start + 1)/1024} KB)`;
@@ -163,10 +147,9 @@ class MemoryManager {
             let status = row.status;
             let programName = row.program;
             
-            // Comprobar si el programa está activo en este tiempo
             const progObj = programs.find(p => p.name === programName);
             if (progObj) {
-                if (time >= progObj.startTime && time <= progObj.endTime) {
+                if (progObj.activeTimes.includes(time)) {
                     status = "Ocupado";
                 } else {
                     status = "Libre";
@@ -249,7 +232,7 @@ class FixedSizeMemoryManager extends MemoryManager {
         return false;
     }
     
-    deallocate(programId) {
+   deallocate(programId) {
         const partition = this.partitions.find(p => p.program && p.program.id === programId);
         if (partition) {
             partition.program = null;
@@ -315,11 +298,13 @@ class VariableSizeMemoryManager extends MemoryManager {
                 partitionToAllocate = candidates[0];
                 break;
             case 'best-fit':
-                candidates.sort((a, b) => (a.end - a.start) - (b.end - b.start));
+                candidates.sort((a, b) => 
+                    (a.end - a.start + 1) - (b.end - b.start + 1));
                 partitionToAllocate = candidates[0];
                 break;
             case 'worst-fit':
-                candidates.sort((a, b) => (b.end - b.start) - (a.end - a.start));
+                candidates.sort((a, b) => 
+                    (b.end - b.start + 1) - (a.end - a.start + 1));
                 partitionToAllocate = candidates[0];
                 break;
         }
@@ -363,12 +348,16 @@ class DynamicMemoryManager extends MemoryManager {
         
         let candidates = [];
         
+        // Buscar todos los huecos que puedan alojar el programa
         for (let i = 0; i < this.partitions.length; i++) {
             const partition = this.partitions[i];
             if (!partition.program) {
                 const partitionSize = partition.end - partition.start + 1;
                 if (partitionSize >= sizeBytes) {
-                    candidates.push({index: i, size: partitionSize});
+                    candidates.push({
+                        index: i,
+                        size: partitionSize
+                    });
                 }
             }
         }
@@ -398,6 +387,7 @@ class DynamicMemoryManager extends MemoryManager {
             const partitionIndex = selectedCandidate.index;
             const partition = this.partitions[partitionIndex];
             
+            // Dividir la partición si hay espacio sobrante
             if ((partition.end - partition.start + 1) > sizeBytes) {
                 const newPartition = {
                     start: partition.start + sizeBytes,
@@ -410,6 +400,7 @@ class DynamicMemoryManager extends MemoryManager {
                 
                 this.partitions.splice(partitionIndex + 1, 0, newPartition);
             } else {
+                // Usar toda la partición si encaja perfectamente
                 partition.program = program;
             }
             
@@ -424,7 +415,10 @@ class DynamicMemoryManager extends MemoryManager {
         if (partitionIndex === -1) return false;
         
         this.partitions[partitionIndex].program = null;
+        
+        // Fusionar con particiones adyacentes libres
         this.mergeAdjacentFreePartitions();
+        
         return true;
     }
     
@@ -436,7 +430,7 @@ class DynamicMemoryManager extends MemoryManager {
             if (!current.program && !next.program) {
                 current.end = next.end;
                 this.partitions.splice(i + 1, 1);
-                i--;
+                i--; // Revisar nuevamente esta posición
             }
         }
     }
@@ -451,6 +445,7 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
     allocate(program) {
         const result = super.allocate(program);
         if (!result) {
+            // Intentar compactación y luego asignar
             this.compact();
             return super.allocate(program);
         }
@@ -458,9 +453,12 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
     }
     
     compact() {
+        // Mover todos los programas al inicio de la memoria
         let currentAddress = 0;
         const newPartitions = [];
+        let freeSpaceStart = null;
         
+        // Primero, agregar todos los programas ocupados
         for (const partition of this.partitions) {
             if (partition.program) {
                 const size = partition.end - partition.start + 1;
@@ -473,7 +471,8 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
             }
         }
         
-        if (currentAddress < TOTAL_MEMORY) {
+        // Luego agregar el espacio libre restante como una sola partición
+        if (currentAddress < TOTAL_MEMORY - 1) {
             newPartitions.push({
                 start: currentAddress,
                 end: TOTAL_MEMORY - 1,
@@ -485,18 +484,26 @@ class DynamicCompactMemoryManager extends DynamicMemoryManager {
     }
 }
 
-// Funciones principales para interacción y configuración
+// Funciones para interacción
 
 function addProgram() {
     const size = parseInt(document.getElementById('programSize').value);
-    const startTime = parseInt(document.getElementById('startTime').value);
-    const endTime = parseInt(document.getElementById('endTime').value);
+    const activeTimesInput = document.getElementById('activeTimesInput') 
+        ? document.getElementById('activeTimesInput').value : null;
 
-    if (isNaN(size) || isNaN(startTime) || isNaN(endTime)) return;
-    if (startTime < 1 || startTime > 6 || endTime < 1 || endTime > 6 || endTime < startTime) {
-        alert("Tiempos inválidos (1-6, y fin >= inicio)");
-        return;
+    let activeTimes = [1,2,3,4,5,6]; // predeterminado si no hay input específico
+
+    if (activeTimesInput) {
+        activeTimes = activeTimesInput.split(',')
+            .map(x => parseInt(x.trim()))
+            .filter(x => x >=1 && x <=6);
+        if (activeTimes.length === 0) {
+            alert("Tiempos inválidos. Deben ser números entre 1 y 6.");
+            return;
+        }
     }
+
+    if (isNaN(size)) return;
 
     const programId = programs.length > 0 ? Math.max(...programs.map(p => p.id)) + 1 : 1;
     const programName = `Programa ${programId}`;
@@ -505,8 +512,7 @@ function addProgram() {
         id: programId,
         name: programName,
         size: size,
-        startTime: startTime,
-        endTime: endTime
+        activeTimes: activeTimes
     };
 
     if (memoryManager.allocate(program)) {
@@ -517,15 +523,16 @@ function addProgram() {
 
 function addRandomProgram() {
     const randomSize = Math.floor(Math.random() * 4096) + 128;
-    const start = Math.floor(Math.random() * 6) + 1;
-    const end = Math.floor(Math.random() * 6) + 1;
-    const startTime = Math.min(start, end);
-    const endTime = Math.max(start, end);
+    let times = [];
+    for (let i = 1; i <= 6; i++) {
+        if (Math.random() > 0.5) times.push(i);
+    }
+    if (times.length === 0) times = [1]; // al menos uno
 
     document.getElementById('programSize').value = randomSize;
-    document.getElementById('startTime').value = startTime;
-    document.getElementById('endTime').value = endTime;
-
+    if (document.getElementById('activeTimesInput')) {
+        document.getElementById('activeTimesInput').value = times.join(',');
+    }
     addProgram();
 }
 
@@ -552,7 +559,7 @@ function applyConfiguration() {
             break;
     }
 
-    // Reasignar programas existentes (recalcula las asignaciones)
+    // Reasignar programas existentes
     const currentPrograms = [...programs];
     programs = [];
     currentPrograms.forEach(program => {
@@ -571,7 +578,6 @@ function removeAllPrograms() {
     memoryManager.updateAll();
 }
 
-// Inicialización de la página y eventos
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('memoryType').addEventListener('change', function() {
         const type = this.value;
@@ -586,14 +592,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('addRandomProgram').addEventListener('click', addRandomProgram);
     document.getElementById('removeAll').addEventListener('click', removeAllPrograms);
 
-    // Añadir programas predefinidos
+    // Inicializar con programas predeterminados
     predefinedPrograms.forEach((prog, index) => {
         const program = {
             id: index + 1,
             name: prog.name,
             size: prog.size,
-            startTime: prog.startTime || 1,
-            endTime: prog.endTime || 6
+            activeTimes: prog.activeTimes || [1,2,3,4,5,6]
         };
         programs.push(program);
     });
@@ -601,24 +606,22 @@ document.addEventListener('DOMContentLoaded', function() {
     applyConfiguration();
 });
 
-
+// Función para matriz de tiempos y programas (igual que antes)
 function updateProgramTimeMatrix() {
     const container = document.getElementById('programTimeMatrix');
-    container.innerHTML = ''; // limpiar
+    container.innerHTML = ''; 
     
     if (programs.length === 0) {
         container.textContent = "No hay programas para mostrar.";
         return;
     }
     
-    // Crear tabla
     const table = document.createElement('table');
     table.style.borderCollapse = 'collapse';
     table.style.width = '100%';
     table.style.textAlign = 'center';
     table.style.fontSize = '12px';
     
-    // Crear encabezado de columnas (Tiempos 1 a 6)
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
     
@@ -639,13 +642,11 @@ function updateProgramTimeMatrix() {
     thead.appendChild(headerRow);
     table.appendChild(thead);
     
-    // Crear cuerpo con filas por programa
     const tbody = document.createElement('tbody');
     
     programs.forEach(prog => {
         const tr = document.createElement('tr');
         
-        // Columna nombre programa
         const nameTd = document.createElement('td');
         nameTd.textContent = prog.name;
         nameTd.style.border = '1px solid #ccc';
@@ -654,16 +655,14 @@ function updateProgramTimeMatrix() {
         nameTd.style.textAlign = 'left';
         tr.appendChild(nameTd);
         
-        // Columnas tiempos 1-6
         for (let time = 1; time <= 6; time++) {
             const td = document.createElement('td');
             td.style.border = '1px solid #ccc';
             td.style.padding = '8px';
             
-            // Si el programa está activo en este tiempo, coloreamos
-            if (time >= prog.startTime && time <= prog.endTime) {
+            if (prog.activeTimes.includes(time)) {
                 td.style.backgroundColor = memoryManager.getProgramColor(prog.id);
-                td.textContent = '●';  // Puedes cambiar por algo más visual
+                td.textContent = '●';
                 td.style.color = '#fff';
             } else {
                 td.textContent = '';
@@ -678,4 +677,3 @@ function updateProgramTimeMatrix() {
     table.appendChild(tbody);
     container.appendChild(table);
 }
-

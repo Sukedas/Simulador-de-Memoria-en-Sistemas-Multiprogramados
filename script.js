@@ -4,11 +4,11 @@ const TOTAL_MEMORY = 16 * 1024 * 1024; // 16 MiB en bytes
 let memoryManager = null;
 let programs = [];
 const predefinedPrograms = [
-    { name: "Navegador", size: 1024, activeTimes: [1,3,6] },
+    { name: "O.S", size: 1024, activeTimes: [1,2,3,4,5,6] },
     { name: "Editor de Texto", size: 512, activeTimes: [2,4,5] },
-    { name: "Reproductor Multimedia", size: 2048, activeTimes: [1,2,3,4,5,6] },
-    { name: "Juego", size: 4096, activeTimes: [4,5,6] },
-    { name: "Compilador", size: 1536, activeTimes: [3,4] }
+    { name: "Juego", size: 2328, activeTimes: [1,2,3,4,5,6] },
+    { name: "Reproductor", size: 896, activeTimes: [4,6] },
+    { name: "Compilador", size: 536, activeTimes: [3,4] }
 ];
 
 // Clase base para administradores de memoria

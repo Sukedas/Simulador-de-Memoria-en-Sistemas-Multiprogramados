@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Simulador de Gestión de Memoria</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css" />   
 </head>
 <body>
     <h1>Simulador de Gestión de Memoria</h1>
-    
+
     <div class="container">
         <div class="panel">
             <h2>Configuración</h2>
@@ -25,12 +25,12 @@
                 
                 <div id="fixedParams">
                     <label for="partitionSize">Tamaño de partición (KB):</label>
-                    <input type="number" id="partitionSize" min="1" value="1024">
+                    <input type="number" id="partitionSize" min="1" value="1024" />
                 </div>
                 
                 <div id="variableParams" style="display:none;">
                     <label for="partitionSizes">Tamaños de particiones (KB, separados por comas):</label>
-                    <input type="text" id="partitionSizes" value="1024,2048,3072,2048,1024">
+                    <input type="text" id="partitionSizes" value="1024,2048,3072,2048,1024" />
                 </div>
                 
                 <div>
@@ -45,43 +45,143 @@
                 <button id="applyConfig">Aplicar Configuración</button>
             </div>
         </div>
-        
+
         <div class="panel">
             <h2>Programas Simulados</h2>
             <div class="controls">
                 <div>
                     <label for="programSize">Tamaño del programa (KB):</label>
-                    <input type="number" id="programSize" min="1" value="512">
+                    <input type="number" id="programSize" min="1" value="512" />
+                </div>
+                <div>
+                    <label for="startTime">Tiempo de inicio (1-6):</label>
+                    <input type="number" id="startTime" min="1" max="6" value="1" />
+                </div>
+                <div>
+                    <label for="endTime">Tiempo de fin (1-6):</label>
+                    <input type="number" id="endTime" min="1" max="6" value="1" />
                 </div>
                 <button id="addProgram">Agregar Programa</button>
                 <button id="addRandomProgram">Agregar Programa Aleatorio</button>
                 <button id="removeAll">Eliminar Todos</button>
             </div>
-            
+
             <div id="programList" class="program-list">
-                <!-- Programas se mostrarán aquí -->
+                <!-- Aquí se mostrarán los programas -->
             </div>
         </div>
-        
+
         <div class="panel">
+            <h2>Matriz de Actividad de Programas</h2>
+            <div id="programTimeMatrix" style="overflow-x:auto;"></div>
+        </div>
+
+
+
+        <div class="panel" style="flex-basis: 100%;">
             <h2>Visualización de Memoria (16 MiB)</h2>
-            <div id="memoryVisualization" class="memory-visualization"></div>
             <div id="memoryStats"></div>
-            <table id="memoryTable">
-                <thead>
-                    <tr>
-                        <th>Dirección Inicio</th>
-                        <th>Dirección Fin</th>
-                        <th>Tamaño (KB)</th>
-                        <th>Estado</th>
-                        <th>Programa</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+
+            <!-- Seis visualizaciones y tablas, una por cada tiempo -->
+            <div>
+                <h3>Tiempo 1</h3>
+                <div id="memoryVisualization1" class="memory-visualization"></div>
+                <table id="memoryTable1">
+                    <thead>
+                        <tr>
+                            <th>Dirección Inicio</th>
+                            <th>Dirección Fin</th>
+                            <th>Tamaño (KB)</th>
+                            <th>Estado</th>
+                            <th>Programa</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div>
+                <h3>Tiempo 2</h3>
+                <div id="memoryVisualization2" class="memory-visualization"></div>
+                <table id="memoryTable2">
+                    <thead>
+                        <tr>
+                            <th>Dirección Inicio</th>
+                            <th>Dirección Fin</th>
+                            <th>Tamaño (KB)</th>
+                            <th>Estado</th>
+                            <th>Programa</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div>
+                <h3>Tiempo 3</h3>
+                <div id="memoryVisualization3" class="memory-visualization"></div>
+                <table id="memoryTable3">
+                    <thead>
+                        <tr>
+                            <th>Dirección Inicio</th>
+                            <th>Dirección Fin</th>
+                            <th>Tamaño (KB)</th>
+                            <th>Estado</th>
+                            <th>Programa</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div>
+                <h3>Tiempo 4</h3>
+                <div id="memoryVisualization4" class="memory-visualization"></div>
+                <table id="memoryTable4">
+                    <thead>
+                        <tr>
+                            <th>Dirección Inicio</th>
+                            <th>Dirección Fin</th>
+                            <th>Tamaño (KB)</th>
+                            <th>Estado</th>
+                            <th>Programa</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div>
+                <h3>Tiempo 5</h3>
+                <div id="memoryVisualization5" class="memory-visualization"></div>
+                <table id="memoryTable5">
+                    <thead>
+                        <tr>
+                            <th>Dirección Inicio</th>
+                            <th>Dirección Fin</th>
+                            <th>Tamaño (KB)</th>
+                            <th>Estado</th>
+                            <th>Programa</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div>
+                <h3>Tiempo 6</h3>
+                <div id="memoryVisualization6" class="memory-visualization"></div>
+                <table id="memoryTable6">
+                    <thead>
+                        <tr>
+                            <th>Dirección Inicio</th>
+                            <th>Dirección Fin</th>
+                            <th>Tamaño (KB)</th>
+                            <th>Estado</th>
+                            <th>Programa</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
-    
+
     <script src="script.js"></script>
 </body>
 </html>

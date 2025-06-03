@@ -5,8 +5,8 @@ let memoryManager = null;
 let programs = [];
 const predefinedPrograms = [
     { name: "O.S", size: 1024, activeTimes: [1,2,3,4,5,6] },
-    { name: "Editor de Texto", size: 512, activeTimes: [2,4,5] },
-    { name: "Juego", size: 2328, activeTimes: [1,2,3,4,5,6] },
+    { name: "Editor de Texto", size: 512, activeTimes: [1,2,4,5] },
+    { name: "Juego", size: 2328, activeTimes: [2,3,4,5,6] },
     { name: "Reproductor", size: 896, activeTimes: [4,6] },
     { name: "Compilador", size: 536, activeTimes: [3,4] }
 ];
@@ -359,13 +359,14 @@ class VariableSizeMemoryManager extends MemoryManager {
     }
 }
 
+
 // Particiones dinámicas sin compactación
 class DynamicMemoryManager extends MemoryManager {
     constructor(allocationAlgorithm) {
         super(allocationAlgorithm);
         this.initializeMemory();
     }
-    
+
     initializeMemory() {
         this.partitions = [{
             start: 0,
@@ -373,146 +374,202 @@ class DynamicMemoryManager extends MemoryManager {
             program: null
         }];
     }
-    
+
     allocate(program) {
         const sizeKB = program.size;
         const sizeBytes = sizeKB * 1024;
-        
-        let candidates = [];
-        
-        // Buscar todos los huecos que puedan alojar el programa
-        for (let i = 0; i < this.partitions.length; i++) {
-            const partition = this.partitions[i];
-            if (!partition.program) {
-                const partitionSize = partition.end - partition.start + 1;
-                if (partitionSize >= sizeBytes) {
-                    candidates.push({
-                        index: i,
-                        size: partitionSize
-                    });
-                }
-            }
-        }
-        
-        if (candidates.length === 0) {
-            alert(`No hay suficiente memoria contigua disponible para ${program.name} (${sizeKB} KB)`);
+
+        // Filtrar particiones libres suficientemente grandes
+        let freePartitions = this.partitions
+            .map((p, index) => ({ ...p, index }))
+            .filter(p => !p.program && (p.end - p.start + 1) >= sizeBytes);
+
+        if (freePartitions.length === 0) {
+            alert(`No hay suficiente memoria contigua para ${program.name} (${sizeKB} KB)`);
             return false;
         }
-        
-        let selectedCandidate = null;
-        
+
+        // Ordenar según algoritmo de asignación
         switch (this.allocationAlgorithm) {
-            case 'first-fit':
-                selectedCandidate = candidates[0];
-                break;
             case 'best-fit':
-                candidates.sort((a, b) => a.size - b.size);
-                selectedCandidate = candidates[0];
+                freePartitions.sort((a, b) => (a.end - a.start) - (b.end - b.start));
                 break;
             case 'worst-fit':
-                candidates.sort((a, b) => b.size - a.size);
-                selectedCandidate = candidates[0];
+                freePartitions.sort((a, b) => (b.end - b.start) - (a.end - a.start));
                 break;
+            // En first-fit no se ordena, ya vienen en orden
         }
-        
-        if (selectedCandidate) {
-            const partitionIndex = selectedCandidate.index;
-            const partition = this.partitions[partitionIndex];
-            
-            // Dividir la partición si hay espacio sobrante
-            if ((partition.end - partition.start + 1) > sizeBytes) {
-                const newPartition = {
-                    start: partition.start + sizeBytes,
-                    end: partition.end,
-                    program: null
-                };
-                
-                partition.end = partition.start + sizeBytes - 1;
-                partition.program = program;
-                
-                this.partitions.splice(partitionIndex + 1, 0, newPartition);
-            } else {
-                // Usar toda la partición si encaja perfectamente
-                partition.program = program;
-            }
-            
-            return true;
+
+        const selected = freePartitions[0];
+        const partition = this.partitions[selected.index];
+
+        // Dividir partición si sobra espacio
+        const originalEnd = partition.end;
+        const allocatedEnd = partition.start + sizeBytes - 1;
+
+        partition.end = allocatedEnd;
+        partition.program = program;
+
+        if (allocatedEnd < originalEnd) {
+            const newPartition = {
+                start: allocatedEnd + 1,
+                end: originalEnd,
+                program: null
+            };
+            this.partitions.splice(selected.index + 1, 0, newPartition);
         }
-        
-        return false;
-    }
-    
-    deallocate(programId) {
-        const partitionIndex = this.partitions.findIndex(p => p.program && p.program.id === programId);
-        if (partitionIndex === -1) return false;
-        
-        this.partitions[partitionIndex].program = null;
-        
-        // Fusionar con particiones adyacentes libres
-        this.mergeAdjacentFreePartitions();
-        
+
         return true;
     }
-    
+
+    deallocate(programId) {
+        const index = this.partitions.findIndex(p => p.program && p.program.id === programId);
+        if (index === -1) return false;
+
+        this.partitions[index].program = null;
+        this.mergeAdjacentFreePartitions();
+        return true;
+    }
+
     mergeAdjacentFreePartitions() {
         for (let i = 0; i < this.partitions.length - 1; i++) {
             const current = this.partitions[i];
             const next = this.partitions[i + 1];
-            
+
             if (!current.program && !next.program) {
                 current.end = next.end;
                 this.partitions.splice(i + 1, 1);
-                i--; // Revisar nuevamente esta posición
+                i--; // Retrocede para volver a verificar con el siguiente
             }
         }
     }
+
+    updateAll() {
+    for (let time = 1; time <= 6; time++) {
+        programs.forEach(prog => {
+            if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
+                this.deallocate(prog.id);
+            }
+        });
+
+        programs.forEach(prog => {
+            if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
+                this.allocate(prog);
+            }
+        });
+
+        this.visualizeMemory(time);
+        this.updateMemoryTable(time);
+
+        // 👇 Segunda pasada para t1 si quedó mal
+        if (time === 1) {
+            const usedInT1 = programs.filter(p => p.activeTimes.includes(1));
+            usedInT1.forEach(p => this.deallocate(p.id));
+            usedInT1.forEach(p => this.allocate(p));
+            this.visualizeMemory(1);
+            this.updateMemoryTable(1);
+        }
+    }
+
+    this.updateStats();
+    this.updateProgramList();
+    }
+
+
+
+
 }
 
+
+
+
+
+
 // Particiones dinámicas con compactación
-class DynamicCompactMemoryManager extends DynamicMemoryManager {
+class DynamicCompactMemoryManager extends MemoryManager {
     constructor(allocationAlgorithm) {
         super(allocationAlgorithm);
+        this.initializeMemory();
     }
-    
+
+    initializeMemory() {
+        this.partitions = []; // Solo programas cargados, la memoria libre está implícita al final
+    }
+
     allocate(program) {
-        const result = super.allocate(program);
-        if (!result) {
-            // Intentar compactación y luego asignar
-            this.compact();
-            return super.allocate(program);
+        const sizeBytes = program.size * 1024;
+        const usedBytes = this.partitions.reduce((acc, p) => acc + (p.end - p.start + 1), 0);
+        const freeBytes = TOTAL_MEMORY - usedBytes;
+
+        if (freeBytes < sizeBytes) {
+            alert(`No hay suficiente memoria para ${program.name} (${program.size} KB)`);
+            return false;
         }
-        return result;
+
+        const start = usedBytes;
+        const end = start + sizeBytes - 1;
+
+        this.partitions.push({
+            start,
+            end,
+            program
+        });
+
+        return true;
     }
-    
-    compact() {
-        // Mover todos los programas al inicio de la memoria
-        let currentAddress = 0;
-        const newPartitions = [];
-        let freeSpaceStart = null;
-        
-        // Primero, agregar todos los programas ocupados
-        for (const partition of this.partitions) {
-            if (partition.program) {
-                const size = partition.end - partition.start + 1;
-                newPartitions.push({
-                    start: currentAddress,
-                    end: currentAddress + size - 1,
-                    program: partition.program
-                });
-                currentAddress += size;
+
+    deallocate(programId) {
+        const index = this.partitions.findIndex(p => p.program && p.program.id === programId);
+        if (index === -1) return false;
+
+        this.partitions.splice(index, 1); // Elimina el programa
+
+        this.compactMemory(); // Reordena los programas hacia el inicio
+        return true;
+    }
+
+    compactMemory() {
+        let currentStart = 0;
+        for (const p of this.partitions) {
+            const size = p.end - p.start + 1;
+            p.start = currentStart;
+            p.end = currentStart + size - 1;
+            currentStart += size;
+        }
+    }
+
+    isAllocated(programId) {
+        return this.partitions.some(p => p.program && p.program.id === programId);
+    }
+
+    updateAll() {
+        for (let time = 1; time <= 6; time++) {
+            programs.forEach(prog => {
+                if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
+                    this.deallocate(prog.id);
+                }
+            });
+
+            programs.forEach(prog => {
+                if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
+                    this.allocate(prog);
+                }
+            });
+
+            this.visualizeMemory(time);
+            this.updateMemoryTable(time);
+
+            if (time === 1) {
+                const usedInT1 = programs.filter(p => p.activeTimes.includes(1));
+                usedInT1.forEach(p => this.deallocate(p.id));
+                usedInT1.forEach(p => this.allocate(p));
+                this.visualizeMemory(1);
+                this.updateMemoryTable(1);
             }
         }
-        
-        // Luego agregar el espacio libre restante como una sola partición
-        if (currentAddress < TOTAL_MEMORY - 1) {
-            newPartitions.push({
-                start: currentAddress,
-                end: TOTAL_MEMORY - 1,
-                program: null
-            });
-        }
-        
-        this.partitions = newPartitions;
+
+        this.updateStats();
+        this.updateProgramList();
     }
 }
 

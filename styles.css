@@ -1,34 +1,134 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
+    background-color: #f5f7fa;
+    color: #333;
+}
+
+h1 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #3498db;
 }
 
 .container {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 25px;
 }
 
 .panel {
-    border: 1px solid #ccc;
-    padding: 15px;
-    border-radius: 5px;
+    border: 1px solid #ddd;
+    padding: 20px;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.controls {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.controls > div {
+    flex: 1 1 200px;
+    min-width: 200px;
+}
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+select, input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+button {
+    padding: 10px 15px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+button#removeAll {
+    background-color: #e74c3c;
+}
+
+button#removeAll:hover {
+    background-color: #c0392b;
+}
+
+.program-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.program-tag {
+    background-color: #e1ecf4;
+    padding: 8px 15px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.program-tag button {
+    padding: 3px 8px;
+    background-color: #e74c3c;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.program-tag button:hover {
+    background-color: #c0392b;
 }
 
 .memory-visualization {
-    height: 300px;
-    border: 1px solid #000;
+    height: 350px;
+    border: 1px solid #bdc3c7;
     position: relative;
-    background-color: #f0f0f0;
+    background-color: #ecf0f1;
     margin-bottom: 20px;
+    border-radius: 4px;
+    overflow: hidden;
 }
 
 .memory-block {
     position: absolute;
     width: 100%;
-    border: 1px solid #000;
+    border: 1px solid rgba(0,0,0,0.1);
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -36,139 +136,287 @@ body {
     color: white;
     font-weight: bold;
     overflow: hidden;
+    text-align: center;
+    font-size: 12px;
+    transition: all 0.3s ease;
 }
 
-.controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-}
-
-button {
-    padding: 8px 15px;
-    cursor: pointer;
-}
-
-select, input {
-    padding: 8px;
+.memory-block:hover {
+    transform: scale(1.02);
+    z-index: 10;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 15px;
+    font-size: 14px;
 }
 
 th, td {
     border: 1px solid #ddd;
-    padding: 8px;
+    padding: 12px;
     text-align: left;
 }
 
 th {
-    background-color: #f2f2f2;
+    background-color: #f2f6fa;
+    color: #2c3e50;
+    font-weight: 600;
 }
 
-.program-list {
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.time-controls {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
+    align-items: center;
+    gap: 15px;
+    margin: 20px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.time-slider-container {
+    flex-grow: 1;
+}
+
+.time-slider {
+    width: 100%;
+    height: 8px;
+    -webkit-appearance: none;
+    background: #e0e7f0;
+    border-radius: 4px;
+    outline: none;
+}
+
+.time-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #3498db;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.time-display {
+    min-width: 30px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+    color: #2c3e50;
+}
+
+.time-navigation button {
+    padding: 8px 12px;
+    font-size: 14px;
+    min-width: 40px;
+}
+
+.memory-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background-color: white;
+    border: 1px solid #e0e7f0;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.stat-card h3 {
+    margin-top: 0;
+    color: #7f8c8d;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.stat-card .value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 10px 0;
+}
+
+.stat-card .sub-value {
+    color: #95a5a6;
+    font-size: 14px;
+}
+
+.matrix-container {
+    overflow-x: auto;
+    margin-top: 15px;
+}
+
+.matrix-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.matrix-table th, .matrix-table td {
+    text-align: center;
+    padding: 10px;
+    min-width: 40px;
+}
+
+/* Nuevos estilos para la gráfica de uso */
+.usage-graph-container {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.graph-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 15px;
 }
 
-.program-tag {
-    background-color: #e1e1e1;
-    padding: 5px 10px;
-    border-radius: 3px;
+.graph-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.graph-legend {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
     display: flex;
     align-items: center;
     gap: 5px;
+    font-size: 14px;
 }
 
-.program-tag button {
-    padding: 2px 5px;
+.legend-color {
+    width: 15px;
+    height: 15px;
+    border-radius: 3px;
+}
+
+.graph-canvas {
+    width: 100%;
+    height: 300px;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.graph-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.graph-grid-line {
+    position: absolute;
+    background-color: #e2e8f0;
+}
+
+.graph-grid-line.horizontal {
+    width: 100%;
+    height: 1px;
+    left: 0;
+}
+
+.graph-grid-line.vertical {
+    width: 1px;
+    height: 100%;
+    top: 0;
+}
+
+.graph-labels {
+    position: absolute;
     font-size: 12px;
+    color: #64748b;
 }
 
+.graph-labels.x-axis {
+    bottom: -20px;
+    text-align: center;
+}
 
-/*<style>
-         NOse
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        .container {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        .panel {
-            flex: 1 1 300px;
-            min-width: 300px;
-            max-width: 600px;
-            border: 1px solid #ccc;
-            padding: 15px;
-            border-radius: 8px;
-            background: #f9f9f9;
-        }
-        .controls > div {
-            margin-bottom: 10px;
-        }
-        .program-list {
-            margin-top: 10px;
-        }
-        .program-tag {
-            display: flex;
-            justify-content: space-between;
-            background-color: #ddd;
-            padding: 5px 10px;
-            margin-bottom: 5px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .program-tag button {
-            background-color: #e74c3c;
-            border: none;
-            color: white;
-            cursor: pointer;
-            border-radius: 3px;
-            padding: 2px 6px;
-        }
-        .memory-visualization {
-            position: relative;
-            width: 100%;
-            height: 150px;
-            border: 1px solid #666;
-            margin-bottom: 10px;
-            background: white;
-            overflow: hidden;
-            font-size: 10px;
-            line-height: 10px;
-        }
-        .memory-block {
-            position: absolute;
-            left: 0;
-            width: 100%;
-            color: white;
-            text-align: center;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            font-weight: bold;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-            font-size: 12px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 6px;
-            text-align: center;
-        }
-        th {
-            background-color: #eee;
-        }
-    </style> */
+.graph-labels.y-axis {
+    left: -35px;
+    text-align: right;
+}
+
+.graph-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+}
+
+.memory-bar {
+    position: absolute;
+    bottom: 0;
+    transition: all 0.3s ease;
+    opacity: 0.85;
+}
+
+.memory-bar:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 10;
+}
+
+.memory-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    white-space: nowrap;
+}
+
+.graph-line {
+    position: absolute;
+    height: 3px;
+    background-color: #e74c3c;
+    z-index: 3;
+}
+
+@media (max-width: 768px) {
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .memory-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .graph-legend {
+        flex-direction: column;
+        gap: 5px;
+    }
+}

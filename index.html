@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Simulador de Gestión de Memoria</title>
-    <link rel="stylesheet" href="styles.css" />   
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <h1>Simulador de Gestión de Memoria</h1>
@@ -67,116 +67,79 @@
             </div>
         </div>
 
-        <div class="panel" style="flex-basis: 100%;">
+        <div class="panel">
             <h2>Matriz de Actividad de Programas</h2>
-            <div id="programTimeMatrix" style="overflow-x:auto;"></div>
-            </div>
+            <div id="programTimeMatrix" class="matrix-container"></div>
         </div>
 
-        <div class="panel" style="flex-basis: 100%;">
+        <div class="panel">
             <h2>Visualización de Memoria (16 MiB)</h2>
-            <div id="memoryStats"></div>
-
-            <!-- Visualizaciones y tablas para tiempos 1 a 6 -->
-            <div>
-                <h3>Tiempo 1</h3>
-                <div id="memoryVisualization1" class="memory-visualization"></div>
-                <table id="memoryTable1">
-                    <thead>
-                        <tr>
-                            <th>Dirección Inicio</th>
-                            <th>Dirección Fin</th>
-                            <th>Tamaño (KB)</th>
-                            <th>Estado</th>
-                            <th>Programa</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            
+            <div class="time-controls">
+                <button class="time-navigation" id="prevTime">◀</button>
+                <div class="time-slider-container">
+                    <input type="range" id="timeSlider" class="time-slider" min="1" max="6" value="1">
+                </div>
+                <button class="time-navigation" id="nextTime">▶</button>
+                <div class="time-display">
+                    Tiempo: <span id="currentTime">1</span>
+                </div>
             </div>
-            <div>
-                <h3>Tiempo 2</h3>
-                <div id="memoryVisualization2" class="memory-visualization"></div>
-                <table id="memoryTable2">
-                    <thead>
-                        <tr>
-                            <th>Dirección Inicio</th>
-                            <th>Dirección Fin</th>
-                            <th>Tamaño (KB)</th>
-                            <th>Estado</th>
-                            <th>Programa</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            
+            <div class="memory-stats">
+                <div class="stat-card">
+                    <h3>Memoria Total</h3>
+                    <div class="value" id="totalMemory">16384 KB</div>
+                    <div class="sub-value">16 MiB</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Memoria Usada</h3>
+                    <div class="value" id="usedMemory">0 KB</div>
+                    <div class="sub-value" id="usedPercent">0%</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Memoria Libre</h3>
+                    <div class="value" id="freeMemory">16384 KB</div>
+                    <div class="sub-value" id="freePercent">100%</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Fragmentación</h3>
+                    <div class="value" id="fragmentation">0 KB</div>
+                    <div class="sub-value">Externa/Interna</div>
+                </div>
             </div>
-            <div>
-                <h3>Tiempo 3</h3>
-                <div id="memoryVisualization3" class="memory-visualization"></div>
-                <table id="memoryTable3">
-                    <thead>
-                        <tr>
-                            <th>Dirección Inicio</th>
-                            <th>Dirección Fin</th>
-                            <th>Tamaño (KB)</th>
-                            <th>Estado</th>
-                            <th>Programa</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <div>
-                <h3>Tiempo 4</h3>
-                <div id="memoryVisualization4" class="memory-visualization"></div>
-                <table id="memoryTable4">
-                    <thead>
-                        <tr>
-                            <th>Dirección Inicio</th>
-                            <th>Dirección Fin</th>
-                            <th>Tamaño (KB)</th>
-                            <th>Estado</th>
-                            <th>Programa</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <div>
-                <h3>Tiempo 5</h3>
-                <div id="memoryVisualization5" class="memory-visualization"></div>
-                <table id="memoryTable5">
-                    <thead>
-                        <tr>
-                            <th>Dirección Inicio</th>
-                            <th>Dirección Fin</th>
-                            <th>Tamaño (KB)</th>
-                            <th>Estado</th>
-                            <th>Programa</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <div>
-                <h3>Tiempo 6</h3>
-                <div id="memoryVisualization6" class="memory-visualization"></div>
-                <table id="memoryTable6">
-                    <thead>
-                        <tr>
-                            <th>Dirección Inicio</th>
-                            <th>Dirección Fin</th>
-                            <th>Tamaño (KB)</th>
-                            <th>Estado</th>
-                            <th>Programa</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            
+            <div id="memoryVisualization" class="memory-visualization"></div>
+            
+            <table id="memoryTable">
+                <thead>
+                    <tr>
+                        <th>Dirección Inicio</th>
+                        <th>Dirección Fin</th>
+                        <th>Tamaño (KB)</th>
+                        <th>Estado</th>
+                        <th>Programa</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        
+        <!-- Nuevo panel para la gráfica de uso de memoria -->
+        <div class="panel">
+            <h2>Uso de Memoria a lo largo del Tiempo</h2>
+            <div class="usage-graph-container">
+                <div class="graph-header">
+                    <div class="graph-title">Consumo de memoria por programa</div>
+                    <div class="graph-legend" id="graphLegend"></div>
+                </div>
+                <div class="graph-canvas" id="usageGraph">
+                    <div class="graph-grid" id="graphGrid"></div>
+                    <div class="graph-content" id="graphContent"></div>
+                </div>
             </div>
         </div>
-
-        
+    </div>
 
     <script src="script.js"></script>
 </body>

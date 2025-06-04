@@ -1,8 +1,15 @@
 // Constantes
 const TOTAL_MEMORY = 16 * 1024 * 1024; // 16 MiB en bytes
+const MAX_TIME = 6;
+const PROGRAM_COLORS = [
+    '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', 
+    '#1abc9c', '#d35400', '#34495e', '#7f8c8d', '#27ae60'
+];
 
 let memoryManager = null;
 let programs = [];
+let currentTime = 1;
+let memorySnapshots = {};
 const predefinedPrograms = [
     { name: "O.S", size: 1024, activeTimes: [1,2,3,4,5,6] },
     { name: "Editor de Texto", size: 512, activeTimes: [1,2,4,5] },
@@ -16,7 +23,6 @@ class MemoryManager {
     constructor(allocationAlgorithm = 'first-fit') {
         this.allocationAlgorithm = allocationAlgorithm;
         this.partitions = [];
-        // this.initializeMemory();
     }
     
     initializeMemory() {}
@@ -24,7 +30,7 @@ class MemoryManager {
     deallocate(programId) { return false; }
     compact() {}
     
-    getMemoryTableData() {
+    getMemoryTableData(time) {
         return this.partitions.map(partition => {
             return {
                 start: partition.start,
@@ -37,37 +43,36 @@ class MemoryManager {
     }
     
     getProgramColor(programId) {
-        const colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', 
-                        '#1abc9c', '#d35400', '#34495e', '#7f8c8d', '#27ae60'];
-        return colors[programId % colors.length];
+        return PROGRAM_COLORS[programId % PROGRAM_COLORS.length];
     }
     
-    updateStats() {
+    updateStats(time) {
         const totalMemoryKB = TOTAL_MEMORY / 1024;
         const usedMemoryKB = this.partitions
-            .filter(p => p.program)
+            .filter(p => p.program && p.program.activeTimes.includes(time))
             .reduce((sum, p) => sum + (p.end - p.start + 1) / 1024, 0);
         const freeMemoryKB = totalMemoryKB - usedMemoryKB;
-        const fragmentation = this.calculateFragmentation();
+        const fragmentation = this.calculateFragmentation(time);
         
-        const statsElement = document.getElementById('memoryStats');
-        statsElement.innerHTML = `
-            <p><strong>Memoria total:</strong> ${totalMemoryKB} KB</p>
-            <p><strong>Memoria usada:</strong> ${usedMemoryKB} KB (${(usedMemoryKB/totalMemoryKB*100).toFixed(2)}%)</p>
-            <p><strong>Memoria libre:</strong> ${freeMemoryKB} KB (${(freeMemoryKB/totalMemoryKB*100).toFixed(2)}%)</p>
-            <p><strong>Fragmentación externa:</strong> ${fragmentation.external.toFixed(2)} KB</p>
-            <p><strong>Fragmentación interna:</strong> ${fragmentation.internal.toFixed(2)} KB</p>
-        `;
+        // Actualizar elementos del DOM
+        document.getElementById('totalMemory').textContent = `${totalMemoryKB} KB`;
+        document.getElementById('usedMemory').textContent = `${usedMemoryKB} KB`;
+        document.getElementById('freeMemory').textContent = `${freeMemoryKB} KB`;
+        document.getElementById('usedPercent').textContent = `(${(usedMemoryKB/totalMemoryKB*100).toFixed(1)}%)`;
+        document.getElementById('freePercent').textContent = `(${(freeMemoryKB/totalMemoryKB*100).toFixed(1)}%)`;
+        document.getElementById('fragmentation').textContent = `${fragmentation.external.toFixed(0)}/${fragmentation.internal.toFixed(0)} KB`;
     }
     
-    calculateFragmentation() {
+    calculateFragmentation(time) {
         let external = 0;
         let internal = 0;
         
+        // Fragmentación externa: bloques libres no asignados
         external = this.partitions
             .filter(p => !p.program)
             .reduce((sum, p) => sum + (p.end - p.start + 1) / 1024, 0);
         
+        // Fragmentación interna: espacio desperdiciado en particiones ocupadas
         internal = this.partitions
             .filter(p => p.program && p.fixedSize)
             .reduce((sum, p) => sum + (p.fixedSize - p.program.size), 0);
@@ -103,7 +108,7 @@ class MemoryManager {
     }
 
     visualizeMemory(time) {
-        const visualization = document.getElementById(`memoryVisualization${time}`);
+        const visualization = document.getElementById('memoryVisualization');
         if (!visualization) return;
         visualization.innerHTML = '';
         
@@ -118,14 +123,21 @@ class MemoryManager {
             block.style.bottom = `${startPercent}%`;
             block.style.height = `${heightPercent}%`;
             
-            if (partition.program && partition.program.activeTimes.includes(time)) {
+            // Verificar si el programa está activo en este tiempo
+            const isActive = partition.program && partition.program.activeTimes.includes(time);
+            
+            if (partition.program && isActive) {
                 block.style.backgroundColor = this.getProgramColor(partition.program.id);
                 block.title = `${partition.program.name} (${partition.program.size} KB)`;
                 block.textContent = `${partition.program.name} (${(partition.end - partition.start + 1)/1024} KB)`;
             } else {
-                block.style.backgroundColor = '#ddd';
-                block.title = `Bloque libre (${(partition.end - partition.start + 1)/1024} KB)`;
-                block.textContent = `Libre (${(partition.end - partition.start + 1)/1024} KB)`;
+                block.style.backgroundColor = partition.program ? '#95a5a6' : '#ecf0f1';
+                block.style.color = partition.program ? 'white' : '#7f8c8d';
+                const sizeKB = (partition.end - partition.start + 1)/1024;
+                block.title = partition.program ? 
+                    `Programa inactivo: ${partition.program.name} (${sizeKB} KB)` : 
+                    `Bloque libre (${sizeKB} KB)`;
+                block.textContent = partition.program ? `(${partition.program.name})` : `Libre (${sizeKB} KB)`;
             }
             
             visualization.appendChild(block);
@@ -133,11 +145,11 @@ class MemoryManager {
     }
 
     updateMemoryTable(time) {
-        const tableBody = document.querySelector(`#memoryTable${time} tbody`);
+        const tableBody = document.querySelector('#memoryTable tbody');
         if (!tableBody) return;
         tableBody.innerHTML = '';
         
-        const data = this.getMemoryTableData();
+        const data = this.getMemoryTableData(time);
         data.forEach(row => {
             const tr = document.createElement('tr');
             
@@ -152,8 +164,7 @@ class MemoryManager {
                 if (progObj.activeTimes.includes(time)) {
                     status = "Ocupado";
                 } else {
-                    status = "Libre";
-                    programName = "-";
+                    status = "Inactivo";
                 }
             }
             
@@ -169,46 +180,74 @@ class MemoryManager {
         });
     }
 
-    // Nuevo método en MemoryManager para liberar las particiones de los procesos 
     isAllocated(programId) {
-    return this.partitions.some(p => p.program && p.program.id === programId);
+        return this.partitions.some(p => p.program && p.program.id === programId);
     }
 
-    // updateAll() {
-    //     for (let time = 1; time <= 6; time++) {
-    //         this.visualizeMemory(time);
-    //         this.updateMemoryTable(time);
-    //     }
-    //     this.updateStats();
-    //     this.updateProgramList();
-    // }
+    // Actualiza todos los tiempos y guarda snapshots
     updateAll() {
-        for (let time = 1; time <= 6; time++) {
+        // Limpiar snapshots anteriores
+        memorySnapshots = {};
+        
+        for (let time = 1; time <= MAX_TIME; time++) {
             // 1) Liberar automáticamente los procesos que ya no están activos en este 'time'
             programs.forEach(prog => {
-            if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
-                this.deallocate(prog.id);
-            }
+                if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
+                    this.deallocate(prog.id);
+                }
             });
 
             // 2) Asignar procesos que sí están activos y aún no asignados
             programs.forEach(prog => {
-            if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
-                this.allocate(prog);
-            }
+                if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
+                    this.allocate(prog);
+                }
             });
-
-            // 3) Renderizar visualización y tabla para este instante
+            
+            // Guardar snapshot del estado actual
+            memorySnapshots[time] = JSON.parse(JSON.stringify({
+                partitions: this.partitions,
+                stats: this.calculateStats(time)
+            }));
+        }
+        
+        // Actualizar visualización para el tiempo actual
+        this.updateForTime(currentTime);
+        
+        // Actualizar gráfica de uso de memoria
+        updateUsageGraph();
+    }
+    
+    // Actualiza solo para un tiempo específico (usando snapshots)
+    updateForTime(time) {
+        if (memorySnapshots[time]) {
+            // Restaurar desde snapshot
+            const snapshot = memorySnapshots[time];
+            this.partitions = snapshot.partitions;
+            
+            // Actualizar UI
             this.visualizeMemory(time);
             this.updateMemoryTable(time);
+            this.updateStats(time);
         }
-        // Actualizar estadísticas y lista de programas
-        this.updateStats();
-        this.updateProgramList();
     }
-
     
-
+    // Calcular estadísticas para un tiempo específico
+    calculateStats(time) {
+        const totalMemoryKB = TOTAL_MEMORY / 1024;
+        const usedMemoryKB = this.partitions
+            .filter(p => p.program && p.program.activeTimes.includes(time))
+            .reduce((sum, p) => sum + (p.end - p.start + 1) / 1024, 0);
+        const freeMemoryKB = totalMemoryKB - usedMemoryKB;
+        const fragmentation = this.calculateFragmentation(time);
+        
+        return {
+            totalMemoryKB,
+            usedMemoryKB,
+            freeMemoryKB,
+            fragmentation
+        };
+    }
 }
 
 // Particiones estáticas de tamaño fijo
@@ -359,7 +398,6 @@ class VariableSizeMemoryManager extends MemoryManager {
     }
 }
 
-
 // Particiones dinámicas sin compactación
 class DynamicMemoryManager extends MemoryManager {
     constructor(allocationAlgorithm) {
@@ -443,47 +481,7 @@ class DynamicMemoryManager extends MemoryManager {
             }
         }
     }
-
-    updateAll() {
-    for (let time = 1; time <= 6; time++) {
-        programs.forEach(prog => {
-            if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
-                this.deallocate(prog.id);
-            }
-        });
-
-        programs.forEach(prog => {
-            if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
-                this.allocate(prog);
-            }
-        });
-
-        this.visualizeMemory(time);
-        this.updateMemoryTable(time);
-
-        // 👇 Segunda pasada para t1 si quedó mal
-        if (time === 1) {
-            const usedInT1 = programs.filter(p => p.activeTimes.includes(1));
-            usedInT1.forEach(p => this.deallocate(p.id));
-            usedInT1.forEach(p => this.allocate(p));
-            this.visualizeMemory(1);
-            this.updateMemoryTable(1);
-        }
-    }
-
-    this.updateStats();
-    this.updateProgramList();
-    }
-
-
-
-
 }
-
-
-
-
-
 
 // Particiones dinámicas con compactación
 class DynamicCompactMemoryManager extends MemoryManager {
@@ -540,36 +538,6 @@ class DynamicCompactMemoryManager extends MemoryManager {
 
     isAllocated(programId) {
         return this.partitions.some(p => p.program && p.program.id === programId);
-    }
-
-    updateAll() {
-        for (let time = 1; time <= 6; time++) {
-            programs.forEach(prog => {
-                if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
-                    this.deallocate(prog.id);
-                }
-            });
-
-            programs.forEach(prog => {
-                if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
-                    this.allocate(prog);
-                }
-            });
-
-            this.visualizeMemory(time);
-            this.updateMemoryTable(time);
-
-            if (time === 1) {
-                const usedInT1 = programs.filter(p => p.activeTimes.includes(1));
-                usedInT1.forEach(p => this.deallocate(p.id));
-                usedInT1.forEach(p => this.allocate(p));
-                this.visualizeMemory(1);
-                this.updateMemoryTable(1);
-            }
-        }
-
-        this.updateStats();
-        this.updateProgramList();
     }
 }
 
@@ -667,35 +635,6 @@ function removeAllPrograms() {
     memoryManager.updateAll();
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('memoryType').addEventListener('change', function() {
-        const type = this.value;
-        document.getElementById('fixedParams').style.display = 
-            (type === 'fixed') ? 'block' : 'none';
-        document.getElementById('variableParams').style.display = 
-            (type === 'variable') ? 'block' : 'none';
-    });
-
-    document.getElementById('applyConfig').addEventListener('click', applyConfiguration);
-    document.getElementById('addProgram').addEventListener('click', addProgram);
-    document.getElementById('addRandomProgram').addEventListener('click', addRandomProgram);
-    document.getElementById('removeAll').addEventListener('click', removeAllPrograms);
-
-    // Inicializar con programas predeterminados
-    predefinedPrograms.forEach((prog, index) => {
-        const program = {
-            id: index + 1,
-            name: prog.name,
-            size: prog.size,
-            activeTimes: prog.activeTimes || [1,2,3,4,5,6]
-        };
-        programs.push(program);
-    });
-
-    applyConfiguration();
-});
-
-// Función para matriz de tiempos y programas (igual que antes)
 function updateProgramTimeMatrix() {
     const container = document.getElementById('programTimeMatrix');
     container.innerHTML = ''; 
@@ -706,6 +645,7 @@ function updateProgramTimeMatrix() {
     }
     
     const table = document.createElement('table');
+    table.className = 'matrix-table';
     table.style.borderCollapse = 'collapse';
     table.style.width = '100%';
     table.style.textAlign = 'center';
@@ -720,7 +660,7 @@ function updateProgramTimeMatrix() {
     emptyTh.style.padding = '4px';
     headerRow.appendChild(emptyTh);
     
-    for (let t = 1; t <= 6; t++) {
+    for (let t = 1; t <= MAX_TIME; t++) {
         const th = document.createElement('th');
         th.textContent = t;
         th.style.border = '1px solid #ccc';
@@ -744,7 +684,7 @@ function updateProgramTimeMatrix() {
         nameTd.style.textAlign = 'left';
         tr.appendChild(nameTd);
         
-        for (let time = 1; time <= 6; time++) {
+        for (let time = 1; time <= MAX_TIME; time++) {
             const td = document.createElement('td');
             td.style.border = '1px solid #ccc';
             td.style.padding = '8px';
@@ -753,8 +693,10 @@ function updateProgramTimeMatrix() {
                 td.style.backgroundColor = memoryManager.getProgramColor(prog.id);
                 td.textContent = '●';
                 td.style.color = '#fff';
+                td.title = `Activo (Tamaño: ${prog.size} KB)`;
             } else {
-                td.textContent = '';
+                td.textContent = '○';
+                td.style.color = '#ddd';
             }
             
             tr.appendChild(td);
@@ -766,3 +708,214 @@ function updateProgramTimeMatrix() {
     table.appendChild(tbody);
     container.appendChild(table);
 }
+
+function changeTime(newTime) {
+    if (newTime < 1) newTime = 1;
+    if (newTime > MAX_TIME) newTime = MAX_TIME;
+    
+    currentTime = newTime;
+    document.getElementById('timeSlider').value = currentTime;
+    document.getElementById('currentTime').textContent = currentTime;
+    
+    if (memoryManager) {
+        memoryManager.updateForTime(currentTime);
+    }
+}
+
+// Función para actualizar la gráfica de uso de memoria
+function updateUsageGraph() {
+    const graphContainer = document.getElementById('usageGraph');
+    const graphContent = document.getElementById('graphContent');
+    const graphGrid = document.getElementById('graphGrid');
+    const graphLegend = document.getElementById('graphLegend');
+    
+    // Limpiar contenido anterior
+    graphContent.innerHTML = '';
+    graphGrid.innerHTML = '';
+    graphLegend.innerHTML = '';
+    
+    // Dimensiones del canvas
+    const width = graphContainer.offsetWidth;
+    const height = graphContainer.offsetHeight;
+    const margin = { top: 30, right: 20, bottom: 50, left: 50 };
+    const graphWidth = width - margin.left - margin.right;
+    const graphHeight = height - margin.top - margin.bottom;
+    
+    // Crear cuadrícula
+    for (let i = 0; i <= 5; i++) {
+        const yPos = margin.top + (i * (graphHeight / 5));
+        
+        const gridLine = document.createElement('div');
+        gridLine.className = 'graph-grid-line horizontal';
+        gridLine.style.top = `${yPos}px`;
+        graphGrid.appendChild(gridLine);
+        
+        const label = document.createElement('div');
+        label.className = 'graph-labels y-axis';
+        label.style.top = `${yPos}px`;
+        label.textContent = `${Math.round(16384 * (1 - i/5))} KB`;
+        graphContainer.appendChild(label);
+    }
+    
+    for (let i = 0; i <= MAX_TIME; i++) {
+        const xPos = margin.left + (i * (graphWidth / MAX_TIME));
+        
+        const gridLine = document.createElement('div');
+        gridLine.className = 'graph-grid-line vertical';
+        gridLine.style.left = `${xPos}px`;
+        graphGrid.appendChild(gridLine);
+        
+        const label = document.createElement('div');
+        label.className = 'graph-labels x-axis';
+        label.style.left = `${xPos}px`;
+        label.textContent = `T${i}`;
+        graphContainer.appendChild(label);
+    }
+    
+    // Crear leyenda
+    programs.forEach((program, index) => {
+        const legendItem = document.createElement('div');
+        legendItem.className = 'legend-item';
+        
+        const colorBox = document.createElement('div');
+        colorBox.className = 'legend-color';
+        colorBox.style.backgroundColor = PROGRAM_COLORS[program.id % PROGRAM_COLORS.length];
+        
+        const name = document.createElement('span');
+        name.textContent = program.name;
+        
+        legendItem.appendChild(colorBox);
+        legendItem.appendChild(name);
+        graphLegend.appendChild(legendItem);
+    });
+    
+    // Crear barras de memoria para cada tiempo
+    for (let time = 1; time <= MAX_TIME; time++) {
+        if (!memorySnapshots[time]) continue;
+        
+        const timePartitions = memorySnapshots[time].partitions;
+        const xPos = margin.left + ((time - 1) * (graphWidth / MAX_TIME)) + 10;
+        const barWidth = (graphWidth / MAX_TIME) - 20;
+        
+        // Calcular la memoria usada por cada programa en este tiempo
+        const programUsage = {};
+        
+        timePartitions.forEach(partition => {
+            if (partition.program && partition.program.activeTimes.includes(time)) {
+                const programId = partition.program.id;
+                const sizeKB = (partition.end - partition.start + 1) / 1024;
+                
+                if (!programUsage[programId]) {
+                    programUsage[programId] = {
+                        size: 0,
+                        program: partition.program
+                    };
+                }
+                
+                programUsage[programId].size += sizeKB;
+            }
+        });
+        
+        // Dibujar barras para cada programa
+        let currentY = margin.top + graphHeight;
+        
+        Object.values(programUsage).forEach(usage => {
+            const program = usage.program;
+            const programHeight = (usage.size / 16384) * graphHeight;
+            
+            const bar = document.createElement('div');
+            bar.className = 'memory-bar';
+            bar.style.left = `${xPos}px`;
+            bar.style.width = `${barWidth}px`;
+            bar.style.height = `${programHeight}px`;
+            bar.style.backgroundColor = PROGRAM_COLORS[program.id % PROGRAM_COLORS.length];
+            bar.style.bottom = `${height - currentY}px`;
+            
+            // Tooltip para mostrar detalles
+            const tooltip = document.createElement('div');
+            tooltip.className = 'memory-tooltip';
+            tooltip.textContent = `${program.name}: ${usage.size.toFixed(0)} KB`;
+            
+            bar.addEventListener('mouseenter', () => {
+                tooltip.style.opacity = '1';
+                tooltip.style.left = `${xPos + barWidth/2}px`;
+                tooltip.style.top = `${currentY - programHeight - 30}px`;
+            });
+            
+            bar.addEventListener('mousemove', (e) => {
+                tooltip.style.left = `${e.clientX - graphContainer.getBoundingClientRect().left + 10}px`;
+                tooltip.style.top = `${e.clientY - graphContainer.getBoundingClientRect().top - 30}px`;
+            });
+            
+            bar.addEventListener('mouseleave', () => {
+                tooltip.style.opacity = '0';
+            });
+            
+            graphContent.appendChild(bar);
+            graphContent.appendChild(tooltip);
+            
+            currentY -= programHeight;
+        });
+    }
+    
+    // Línea de memoria total
+    const totalLine = document.createElement('div');
+    totalLine.className = 'graph-line';
+    totalLine.style.bottom = `${margin.top}px`;
+    totalLine.style.left = `${margin.left}px`;
+    totalLine.style.width = `${graphWidth}px`;
+    graphContent.appendChild(totalLine);
+    
+    // Etiqueta para memoria total
+    const totalLabel = document.createElement('div');
+    totalLabel.className = 'graph-labels';
+    totalLabel.textContent = 'Memoria Total (16 MiB)';
+    totalLabel.style.bottom = `${margin.top - 10}px`;
+    totalLabel.style.left = `${margin.left + graphWidth - 100}px`;
+    totalLabel.style.color = '#e74c3c';
+    totalLabel.style.fontWeight = 'bold';
+    graphContent.appendChild(totalLabel);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('memoryType').addEventListener('change', function() {
+        const type = this.value;
+        document.getElementById('fixedParams').style.display = 
+            (type === 'fixed') ? 'block' : 'none';
+        document.getElementById('variableParams').style.display = 
+            (type === 'variable') ? 'block' : 'none';
+    });
+
+    document.getElementById('applyConfig').addEventListener('click', applyConfiguration);
+    document.getElementById('addProgram').addEventListener('click', addProgram);
+    document.getElementById('addRandomProgram').addEventListener('click', addRandomProgram);
+    document.getElementById('removeAll').addEventListener('click', removeAllPrograms);
+    
+    // Control de tiempo
+    document.getElementById('timeSlider').addEventListener('input', function() {
+        changeTime(parseInt(this.value));
+    });
+    
+    document.getElementById('prevTime').addEventListener('click', function() {
+        changeTime(currentTime - 1);
+    });
+    
+    document.getElementById('nextTime').addEventListener('click', function() {
+        changeTime(currentTime + 1);
+    });
+
+    // Inicializar con programas predeterminados
+    predefinedPrograms.forEach((prog, index) => {
+        const program = {
+            id: index + 1,
+            name: prog.name,
+            size: prog.size,
+            activeTimes: prog.activeTimes || [1,2,3,4,5,6]
+        };
+        programs.push(program);
+    });
+
+    // Aplicar configuración inicial
+    applyConfiguration();
+});

@@ -1,21 +1,25 @@
 // Constantes
 const TOTAL_MEMORY = 16 * 1024 * 1024; // 16 MiB en bytes
-const MAX_TIME = 6;
+let MAX_TIME = 0; // irá creciendo dinámicamente
 const PROGRAM_COLORS = [
     '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', 
     '#1abc9c', '#d35400', '#34495e', '#7f8c8d', '#27ae60'
 ];
 
+let pendingPrograms = []; // cola de espera
+let queuedProgramIds = []; // IDs de programas que están en cola
+
+
 let memoryManager = null;
 let programs = [];
-let currentTime = 1;
+let currentTime = 0;
 let memorySnapshots = {};
 const predefinedPrograms = [
-    { name: "O.S", size: 1024, activeTimes: [1,2,3,4,5,6] },
-    { name: "Editor de Texto", size: 512, activeTimes: [1,2,4,5] },
-    { name: "Juego", size: 2328, activeTimes: [2,3,4,5,6] },
-    { name: "Reproductor", size: 896, activeTimes: [4,6] },
-    { name: "Compilador", size: 536, activeTimes: [3,4] }
+    { name: "O.S", size: 1024, protected: true },
+    { name: "Editor de Texto", size: 512 },
+    { name: "Juego", size: 2328 },
+    { name: "Reproductor", size: 896 },
+    { name: "Compilador", size: 536 }
 ];
 
 // Clase base para administradores de memoria
@@ -83,27 +87,45 @@ class MemoryManager {
     updateProgramList() {
         const programList = document.getElementById('programList');
         programList.innerHTML = '';
-        
+    
         programs.forEach(program => {
-            const programTag = document.createElement('div');
-            programTag.className = 'program-tag';
-            programTag.style.backgroundColor = this.getProgramColor(program.id);
-            
-            programTag.innerHTML = `
-                <span>${program.name} (${program.size} KB) [Tiempos: ${program.activeTimes.join(', ')}]</span>
-                <button data-id="${program.id}">X</button>
-            `;
-            
-            programTag.querySelector('button').addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.deallocate(program.id);
-                programs = programs.filter(p => p.id !== program.id);
-                this.updateAll();
-            });
-            
-            programList.appendChild(programTag);
+            const tag = document.createElement('div');
+            tag.className = 'program-tag';
+            tag.style.backgroundColor = this.getProgramColor(program.id);
+    
+            const isQueued = queuedProgramIds.includes(program.id);
+    
+            tag.innerHTML = `<span>${program.name} (${program.size} KB)</span>`;
+
+if (!program.protected) {
+    const queueButton = document.createElement('button');
+    queueButton.className = 'btn-queue';
+    queueButton.textContent = isQueued ? '✔️ En Cola' : '➕ A Cola';
+    queueButton.addEventListener('click', () => {
+        if (!isQueued) {
+            queuedProgramIds.push(program.id);
+            memoryManager.updateProgramList();
+        }
+    });
+    tag.appendChild(queueButton);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'btn-delete';
+    deleteButton.textContent = '🗑️';
+    deleteButton.addEventListener('click', () => {
+        memoryManager.deallocate(program.id);
+        programs = programs.filter(p => p.id !== program.id);
+        queuedProgramIds = queuedProgramIds.filter(id => id !== program.id);
+        memoryManager.updateProgramList();
+        memoryManager.updateAll();
+    });
+    tag.appendChild(deleteButton);
+}
+
+    
+            programList.appendChild(tag);
         });
-        
+    
         updateProgramTimeMatrix();
     }
 
@@ -193,14 +215,12 @@ class MemoryManager {
             // 1) Liberar automáticamente los procesos que ya no están activos en este 'time'
             programs.forEach(prog => {
                 if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
-                    this.deallocate(prog.id);
+                    this.deallocate(prog.id); // ✔️ Libera si no está activo
                 }
             });
-
-            // 2) Asignar procesos que sí están activos y aún no asignados
             programs.forEach(prog => {
                 if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
-                    this.allocate(prog);
+                    this.allocate(prog); // ✔️ Carga si está activo
                 }
             });
             
@@ -280,7 +300,6 @@ class FixedSizeMemoryManager extends MemoryManager {
         const sizeBytes = sizeKB * 1024;
         
         if (sizeBytes > this.partitionSizeBytes) {
-            alert(`El programa ${program.name} (${sizeKB} KB) es demasiado grande para las particiones de ${this.partitionSizeBytes/1024} KB`);
             return false;
         }
         
@@ -545,37 +564,20 @@ class DynamicCompactMemoryManager extends MemoryManager {
 
 function addProgram() {
     const size = parseInt(document.getElementById('programSize').value);
-    const activeTimesInput = document.getElementById('activeTimesInput') 
-        ? document.getElementById('activeTimesInput').value : null;
-
-    let activeTimes = [1,2,3,4,5,6]; // predeterminado si no hay input específico
-
-    if (activeTimesInput) {
-        activeTimes = activeTimesInput.split(',')
-            .map(x => parseInt(x.trim()))
-            .filter(x => x >=1 && x <=6);
-        if (activeTimes.length === 0) {
-            alert("Tiempos inválidos. Deben ser números entre 1 y 6.");
-            return;
-        }
-    }
-
     if (isNaN(size)) return;
 
-    const programId = programs.length > 0 ? Math.max(...programs.map(p => p.id)) + 1 : 1;
-    const programName = `Programa ${programId}`;
+    const id = programs.length > 0 ? Math.max(...programs.map(p => p.id)) + 1 : 1;
+    const name = `Programa ${id}`;
 
     const program = {
-        id: programId,
-        name: programName,
-        size: size,
-        activeTimes: activeTimes
+        id,
+        name,
+        size,
+        activeTimes: []
     };
 
-    if (memoryManager.allocate(program)) {
-        programs.push(program);
-        memoryManager.updateAll();
-    }
+    programs.push(program);
+    memoryManager.updateProgramList();
 }
 
 function addRandomProgram() {
@@ -890,7 +892,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('applyConfig').addEventListener('click', applyConfiguration);
     document.getElementById('addProgram').addEventListener('click', addProgram);
     document.getElementById('addRandomProgram').addEventListener('click', addRandomProgram);
-    document.getElementById('removeAll').addEventListener('click', removeAllPrograms);
+    document.getElementById('simulateStep').addEventListener('click', simulateStep);
     
     // Control de tiempo
     document.getElementById('timeSlider').addEventListener('input', function() {
@@ -907,15 +909,79 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Inicializar con programas predeterminados
     predefinedPrograms.forEach((prog, index) => {
-        const program = {
+        programs.push({
             id: index + 1,
             name: prog.name,
             size: prog.size,
-            activeTimes: prog.activeTimes || [1,2,3,4,5,6]
-        };
-        programs.push(program);
+            activeTimes: [],
+            protected: prog.protected || false
+        });
     });
 
     // Aplicar configuración inicial
     applyConfiguration();
+    memoryManager.updateProgramList();
 });
+
+function queueProgram() {
+    const size = parseInt(document.getElementById('programSize').value);
+    if (isNaN(size)) return;
+
+    const id = programs.length + pendingPrograms.length + 1;
+    const program = {
+        id,
+        name: `Programa ${id}`,
+        size,
+        activeTimes: [] // aún no asignado
+    };
+    pendingPrograms.push(program);
+    updatePendingList();
+}
+
+
+function updatePendingList() {
+    const container = document.getElementById('pendingList');
+    container.innerHTML = '';
+    pendingPrograms.forEach(program => {
+        const div = document.createElement('div');
+        div.className = 'program-tag';
+        div.style.backgroundColor = memoryManager.getProgramColor(program.id);
+        div.innerHTML = `<span>${program.name} (${program.size} KB)</span>
+                         <button data-id="${program.id}">X</button>`;
+        div.querySelector('button').addEventListener('click', () => {
+            pendingPrograms = pendingPrograms.filter(p => p.id !== program.id);
+            updatePendingList();
+        });
+        container.appendChild(div);
+    });
+}
+
+function simulateStep() {
+    if (queuedProgramIds.length === 0) return;
+
+    currentTime++;
+    MAX_TIME = currentTime;
+
+
+    const osProgram = programs.find(p => p.name === "O.S");
+    if (osProgram && !osProgram.activeTimes.includes(currentTime)) {
+        osProgram.activeTimes.push(currentTime);
+        memoryManager.allocate(osProgram);
+    }
+
+    const newPrograms = programs.filter(p => queuedProgramIds.includes(p.id));
+    newPrograms.forEach(p => {
+        p.activeTimes.push(currentTime);
+        memoryManager.allocate(p);
+    });
+
+    queuedProgramIds = [];
+    memoryManager.updateAll();
+    memoryManager.updateProgramList();
+
+    document.getElementById('timeSlider').max = MAX_TIME;
+    document.getElementById('timeSlider').value = currentTime;
+    document.getElementById('currentTime').textContent = currentTime;
+
+    applyConfiguration(); 
+}

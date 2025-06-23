@@ -253,12 +253,30 @@ class MemoryManager {
     // Calcular estadísticas para un tiempo específico
     calculateStats(time) {
         const totalMemoryKB = TOTAL_MEMORY / 1024;
-        const usedMemoryKB = this.partitions
-            .filter(p => p.program && p.program.activeTimes.includes(time))
-            .reduce((sum, p) => sum + (p.end - p.start + 1) / 1024, 0);
+        let usedMemoryKB = 0;
+        if (this.frames) {
+            // Si es paginación, contar marcos ocupados
+            usedMemoryKB = this.frames.filter(f => f).length * this.pageSizeKB;
+        } else {
+            usedMemoryKB = this.partitions
+                .filter(p => p.program && p.program.activeTimes.includes(time))
+                .reduce((sum, p) => sum + (p.end - p.start + 1) / 1024, 0);
+        }
         const freeMemoryKB = totalMemoryKB - usedMemoryKB;
-        const fragmentation = this.calculateFragmentation(time);
-        
+        // Fragmentación interna: suma de espacio desperdiciado en la última página de cada programa activo
+        let internal = 0;
+        if (this.frames) {
+            for (const pid in this.pageTables) {
+                const prog = programs.find(p => p.id == pid);
+                if (!prog || !prog.activeTimes.includes(time)) continue;
+                const numPages = Math.ceil(prog.size / this.pageSizeKB);
+                const lastPageSize = prog.size % this.pageSizeKB;
+                if (lastPageSize > 0) {
+                    internal += this.pageSizeKB - lastPageSize;
+                }
+            }
+        }
+        const fragmentation = { external: 0, internal };
         return {
             totalMemoryKB,
             usedMemoryKB,
@@ -676,32 +694,68 @@ class PagingMemoryManager extends MemoryManager {
             return;
         }
         panel.style.display = '';
-        // Mostrar marcos de página
+        // Mostrar marcos de página en cuadrícula
         const framesStatus = document.getElementById('framesStatus');
-        framesStatus.innerHTML = '<b>Marcos de Página:</b><br>';
+        framesStatus.innerHTML = '<b>Marcos de Página:</b>';
+        const grid = document.createElement('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(8, 1fr)';
+        grid.style.gap = '6px';
         for (let i = 0; i < this.frames.length; i++) {
             const frame = this.frames[i];
-            let color = '#ecf0f1';
-            let label = `Libre`;
-            if (frame) {
-                color = this.getProgramColor(frame.programId);
-                label = `P${frame.programId} (Pág. ${frame.page})`;
-            }
-            framesStatus.innerHTML += `<span style="display:inline-block;width:60px;margin:2px;padding:2px;background:${color};border:1px solid #ccc;">${i.toString(16).toUpperCase().padStart(2,'0')}: ${label}</span>`;
-            if ((i+1)%8===0) framesStatus.innerHTML += '<br>';
+            const cell = document.createElement('div');
+            cell.style.border = '1px solid #ccc';
+            cell.style.borderRadius = '8px';
+            cell.style.padding = '6px 2px';
+            cell.style.background = frame ? this.getProgramColor(frame.programId) : '#ecf0f1';
+            cell.style.color = frame ? '#fff' : '#888';
+            cell.style.fontWeight = 'bold';
+            cell.style.fontSize = '13px';
+            cell.style.textAlign = 'center';
+            cell.title = frame ? `P${frame.programId} (Página ${frame.page})` : 'Libre';
+            cell.innerHTML = `<span style="font-size:11px;">${i.toString(16).toUpperCase().padStart(2,'0')}</span><br>${frame ? `P${frame.programId}<br>Pág. ${frame.page}` : 'Libre'}`;
+            grid.appendChild(cell);
         }
-        // Mostrar tablas de páginas
+        framesStatus.appendChild(grid);
+        // Mostrar tablas de páginas con mejor estilo
         const pageTablesDiv = document.getElementById('pageTables');
         pageTablesDiv.innerHTML = '';
         for (const pid in this.pageTables) {
             const prog = programs.find(p => p.id == pid);
             if (!prog) continue;
-            pageTablesDiv.innerHTML += `<b>Tabla de páginas - ${prog.name}</b><br>`;
-            pageTablesDiv.innerHTML += '<table border="1" style="margin-bottom:10px;"><tr><th>Página</th><th>Marco</th></tr>';
+            const tableDiv = document.createElement('div');
+            tableDiv.className = 'segment-table';
+            tableDiv.style.background = '#f9f9f9';
+            tableDiv.style.marginBottom = '12px';
+            tableDiv.style.minWidth = '180px';
+            tableDiv.style.display = 'inline-block';
+            tableDiv.style.verticalAlign = 'top';
+            tableDiv.style.border = '1px solid #ddd';
+            tableDiv.style.borderRadius = '8px';
+            tableDiv.style.padding = '10px';
+            const header = document.createElement('h3');
+            header.textContent = `${prog.name} - Tabla de Páginas`;
+            header.style.marginTop = '0';
+            header.style.fontSize = '15px';
+            header.style.color = '#2c3e50';
+            header.style.borderBottom = '1px solid #ddd';
+            header.style.paddingBottom = '5px';
+            tableDiv.appendChild(header);
+            const table = document.createElement('table');
+            table.style.width = '100%';
+            table.style.borderCollapse = 'collapse';
+            const thead = document.createElement('thead');
+            thead.innerHTML = '<tr><th style="background:#ffe600;color:#222;border-radius:6px 6px 0 0;">Página</th><th style="background:#ffe600;color:#222;border-radius:6px 6px 0 0;">Marco</th></tr>';
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
             this.pageTables[pid].forEach((frame, page) => {
-                pageTablesDiv.innerHTML += `<tr><td>${page}</td><td>${frame.toString(16).toUpperCase().padStart(2,'0')}</td></tr>`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td style="padding:6px 4px;">${page}</td><td style="padding:6px 4px;">${frame.toString(16).toUpperCase().padStart(2,'0')}</td>`;
+                tbody.appendChild(tr);
             });
-            pageTablesDiv.innerHTML += '</table>';
+            table.appendChild(tbody);
+            tableDiv.appendChild(table);
+            pageTablesDiv.appendChild(tableDiv);
         }
     }
 }

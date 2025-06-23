@@ -20,6 +20,8 @@
                         <option value="variable">Particiones estáticas de tamaño variable</option>
                         <option value="dynamic">Particiones dinámicas sin compactación</option>
                         <option value="dynamic-compact">Particiones dinámicas con compactación</option>
+                        <option value="paging">Paginación</option>
+
                     </select>
                 </div>
                 
@@ -32,7 +34,10 @@
                     <label for="partitionSizes">Tamaños de particiones (KB, separados por comas):</label>
                     <input type="text" id="partitionSizes" value="1024,2048,3072,2048,1024" />
                 </div>
-                
+                <div id="pagingParams" style="display:none;">
+                    <label for="pageSize">Tamaño de página (KB):</label>
+                    <input type="number" id="pageSize" min="1" value="256" />
+                </div>
                 <div>
                     <label for="allocationAlgorithm">Algoritmo de asignación:</label>
                     <select id="allocationAlgorithm">
@@ -44,6 +49,13 @@
                 
                 <button id="applyConfig">Aplicar Configuración</button>
             </div>
+        </div>
+
+        <!-- Panel para tablas de páginas y marcos de página (Paginación) -->
+        <div class="panel" id="pagingPanel" style="display:none;">
+            <h2>Paginación: Tablas de Páginas y Marcos de Página</h2>
+            <div id="framesStatus" class="frames-status"></div>
+            <div id="pageTables" class="page-tables"></div>
         </div>
 
         <div class="panel">
@@ -140,8 +152,17 @@
     </div>
 
     <script src="script.js"></script>
-</body>
-</html>
-    <script src="script.js"></script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Mostrar/ocultar campos según el método de gestión seleccionado
+    document.getElementById('memoryType').addEventListener('change', function() {
+        const type = this.value;
+        document.getElementById('fixedParams').style.display = (type === 'fixed') ? '' : 'none';
+        document.getElementById('variableParams').style.display = (type === 'variable') ? '' : 'none';
+        document.getElementById('pagingParams').style.display = (type === 'paging') ? '' : 'none';
+        document.getElementById('pagingPanel').style.display = (type === 'paging') ? '' : 'none';
+    });
+});
+</script>
 </body>
 </html>

@@ -560,6 +560,154 @@ class DynamicCompactMemoryManager extends MemoryManager {
     }
 }
 
+// Clase para administración de memoria por paginación
+class PagingMemoryManager extends MemoryManager {
+    constructor(pageSizeKB = 4) {
+        super('paging');
+        this.pageSizeKB = pageSizeKB;
+        this.pageSizeBytes = pageSizeKB * 1024;
+        this.numFrames = Math.floor(TOTAL_MEMORY / this.pageSizeBytes);
+        this.frames = Array(this.numFrames).fill(null); // Cada frame puede estar libre o tener { programId, page }
+        this.pageTables = {}; // { programId: [frameIndex, ...] }
+        this.initializeMemory();
+    }
+
+    initializeMemory() {
+        this.frames = Array(this.numFrames).fill(null);
+        this.pageTables = {};
+        this.partitions = [];
+    }
+
+    allocate(program) {
+        const numPages = Math.ceil((program.size) / this.pageSizeKB);
+        let freeFrames = [];
+        for (let i = 0; i < this.frames.length; i++) {
+            if (!this.frames[i]) freeFrames.push(i);
+        }
+        if (freeFrames.length < numPages) {
+            alert(`No hay suficientes marcos de página libres para ${program.name}`);
+            return false;
+        }
+        this.pageTables[program.id] = [];
+        for (let p = 0; p < numPages; p++) {
+            const frame = freeFrames[p];
+            this.frames[frame] = { programId: program.id, page: p };
+            this.pageTables[program.id].push(frame);
+        }
+        return true;
+    }
+
+    deallocate(programId) {
+        if (!this.pageTables[programId]) return false;
+        for (const frame of this.pageTables[programId]) {
+            this.frames[frame] = null;
+        }
+        delete this.pageTables[programId];
+        return true;
+    }
+
+    getMemoryTableData(time) {
+        // Para compatibilidad con la tabla de memoria
+        let data = [];
+        for (let i = 0; i < this.frames.length; i++) {
+            const frame = this.frames[i];
+            let programName = '-';
+            let status = 'Libre';
+            if (frame) {
+                const prog = programs.find(p => p.id === frame.programId);
+                if (prog && prog.activeTimes.includes(time)) {
+                    programName = prog.name + ` (Página ${frame.page})`;
+                    status = 'Ocupado';
+                } else if (prog) {
+                    programName = prog.name + ` (Página ${frame.page})`;
+                    status = 'Inactivo';
+                }
+            }
+            data.push({
+                start: i * this.pageSizeBytes,
+                end: (i + 1) * this.pageSizeBytes - 1,
+                size: this.pageSizeBytes / 1024,
+                status,
+                program: programName
+            });
+        }
+        return data;
+    }
+
+    updateAll() {
+        // Limpiar frames y tablas
+        this.initializeMemory();
+        for (let time = 1; time <= MAX_TIME; time++) {
+            // Asignar marcos a los programas activos en este tiempo
+            programs.forEach(prog => {
+                if (prog.activeTimes.includes(time)) {
+                    this.allocate(prog);
+                } else {
+                    this.deallocate(prog.id);
+                }
+            });
+            // Guardar snapshot
+            memorySnapshots[time] = JSON.parse(JSON.stringify({
+                frames: this.frames,
+                pageTables: this.pageTables,
+                stats: this.calculateStats(time)
+            }));
+        }
+        this.updateForTime(currentTime);
+        updateUsageGraph();
+        this.updatePagingPanel();
+    }
+
+    updateForTime(time) {
+        if (memorySnapshots[time]) {
+            const snapshot = memorySnapshots[time];
+            this.frames = snapshot.frames;
+            this.pageTables = snapshot.pageTables;
+            this.visualizeMemory(time);
+            this.updateMemoryTable(time);
+            this.updateStats(time);
+            this.updatePagingPanel();
+        }
+    }
+
+    updatePagingPanel() {
+        const panel = document.getElementById('pagingPanel');
+        if (!panel) return;
+        if (document.getElementById('memoryType').value !== 'paging') {
+            panel.style.display = 'none';
+            return;
+        }
+        panel.style.display = '';
+        // Mostrar marcos de página
+        const framesStatus = document.getElementById('framesStatus');
+        framesStatus.innerHTML = '<b>Marcos de Página:</b><br>';
+        for (let i = 0; i < this.frames.length; i++) {
+            const frame = this.frames[i];
+            let color = '#ecf0f1';
+            let label = `Libre`;
+            if (frame) {
+                color = this.getProgramColor(frame.programId);
+                label = `P${frame.programId} (Pág. ${frame.page})`;
+            }
+            framesStatus.innerHTML += `<span style="display:inline-block;width:60px;margin:2px;padding:2px;background:${color};border:1px solid #ccc;">${i.toString(16).toUpperCase().padStart(2,'0')}: ${label}</span>`;
+            if ((i+1)%8===0) framesStatus.innerHTML += '<br>';
+        }
+        // Mostrar tablas de páginas
+        const pageTablesDiv = document.getElementById('pageTables');
+        pageTablesDiv.innerHTML = '';
+        for (const pid in this.pageTables) {
+            const prog = programs.find(p => p.id == pid);
+            if (!prog) continue;
+            pageTablesDiv.innerHTML += `<b>Tabla de páginas - ${prog.name}</b><br>`;
+            pageTablesDiv.innerHTML += '<table border="1" style="margin-bottom:10px;"><tr><th>Página</th><th>Marco</th></tr>';
+            this.pageTables[pid].forEach((frame, page) => {
+                pageTablesDiv.innerHTML += `<tr><td>${page}</td><td>${frame.toString(16).toUpperCase().padStart(2,'0')}</td></tr>`;
+            });
+            pageTablesDiv.innerHTML += '</table>';
+        }
+    }
+}
+
 // Funciones para interacción
 
 function addProgram() {
@@ -615,6 +763,10 @@ function applyConfiguration() {
             break;
         case 'dynamic-compact':
             memoryManager = new DynamicCompactMemoryManager(algorithm);
+            break;
+        case 'paging':
+            const pageSize = parseInt(document.getElementById('pageSize').value);
+            memoryManager = new PagingMemoryManager(pageSize);
             break;
     }
 
@@ -730,101 +882,88 @@ function updateUsageGraph() {
     const graphContent = document.getElementById('graphContent');
     const graphGrid = document.getElementById('graphGrid');
     const graphLegend = document.getElementById('graphLegend');
-    
-    // Limpiar contenido anterior
     graphContent.innerHTML = '';
     graphGrid.innerHTML = '';
     graphLegend.innerHTML = '';
-    
     // Dimensiones del canvas
     const width = graphContainer.offsetWidth;
     const height = graphContainer.offsetHeight;
     const margin = { top: 30, right: 20, bottom: 50, left: 50 };
     const graphWidth = width - margin.left - margin.right;
     const graphHeight = height - margin.top - margin.bottom;
-    
     // Crear cuadrícula
     for (let i = 0; i <= 5; i++) {
         const yPos = margin.top + (i * (graphHeight / 5));
-        
         const gridLine = document.createElement('div');
         gridLine.className = 'graph-grid-line horizontal';
         gridLine.style.top = `${yPos}px`;
         graphGrid.appendChild(gridLine);
-        
         const label = document.createElement('div');
         label.className = 'graph-labels y-axis';
         label.style.top = `${yPos}px`;
         label.textContent = `${Math.round(16384 * (1 - i/5))} KB`;
         graphContainer.appendChild(label);
     }
-    
     for (let i = 0; i <= MAX_TIME; i++) {
         const xPos = margin.left + (i * (graphWidth / MAX_TIME));
-        
         const gridLine = document.createElement('div');
         gridLine.className = 'graph-grid-line vertical';
         gridLine.style.left = `${xPos}px`;
         graphGrid.appendChild(gridLine);
-        
         const label = document.createElement('div');
         label.className = 'graph-labels x-axis';
         label.style.left = `${xPos}px`;
         label.textContent = `T${i}`;
         graphContainer.appendChild(label);
     }
-    
-    // Crear leyenda
     programs.forEach((program, index) => {
         const legendItem = document.createElement('div');
         legendItem.className = 'legend-item';
-        
         const colorBox = document.createElement('div');
         colorBox.className = 'legend-color';
         colorBox.style.backgroundColor = PROGRAM_COLORS[program.id % PROGRAM_COLORS.length];
-        
         const name = document.createElement('span');
         name.textContent = program.name;
-        
         legendItem.appendChild(colorBox);
         legendItem.appendChild(name);
         graphLegend.appendChild(legendItem);
     });
-    
-    // Crear barras de memoria para cada tiempo
     for (let time = 1; time <= MAX_TIME; time++) {
         if (!memorySnapshots[time]) continue;
-        
-        const timePartitions = memorySnapshots[time].partitions;
+        let timePartitions = memorySnapshots[time].partitions;
+        // Soporte para paginación: usar frames si existen
+        if (!timePartitions && memorySnapshots[time].frames) {
+            // Simular particiones a partir de frames
+            timePartitions = memorySnapshots[time].frames.map((frame, idx) => {
+                if (!frame) return null;
+                const prog = programs.find(p => p.id === frame.programId);
+                return prog && prog.activeTimes.includes(time) ? {
+                    program: prog,
+                    start: idx * (prog && prog.pageSizeBytes ? prog.pageSizeBytes : 4096),
+                    end: (idx + 1) * (prog && prog.pageSizeBytes ? prog.pageSizeBytes : 4096) - 1
+                } : null;
+            }).filter(Boolean);
+        }
         const xPos = margin.left + ((time - 1) * (graphWidth / MAX_TIME)) + 10;
         const barWidth = (graphWidth / MAX_TIME) - 20;
-        
-        // Calcular la memoria usada por cada programa en este tiempo
         const programUsage = {};
-        
-        timePartitions.forEach(partition => {
-            if (partition.program && partition.program.activeTimes.includes(time)) {
+        (timePartitions || []).forEach(partition => {
+            if (partition.program && partition.program.activeTimes && partition.program.activeTimes.includes(time)) {
                 const programId = partition.program.id;
                 const sizeKB = (partition.end - partition.start + 1) / 1024;
-                
                 if (!programUsage[programId]) {
                     programUsage[programId] = {
                         size: 0,
                         program: partition.program
                     };
                 }
-                
                 programUsage[programId].size += sizeKB;
             }
         });
-        
-        // Dibujar barras para cada programa
         let currentY = margin.top + graphHeight;
-        
         Object.values(programUsage).forEach(usage => {
             const program = usage.program;
             const programHeight = (usage.size / 16384) * graphHeight;
-            
             const bar = document.createElement('div');
             bar.className = 'memory-bar';
             bar.style.left = `${xPos}px`;
@@ -832,43 +971,32 @@ function updateUsageGraph() {
             bar.style.height = `${programHeight}px`;
             bar.style.backgroundColor = PROGRAM_COLORS[program.id % PROGRAM_COLORS.length];
             bar.style.bottom = `${height - currentY}px`;
-            
-            // Tooltip para mostrar detalles
             const tooltip = document.createElement('div');
             tooltip.className = 'memory-tooltip';
             tooltip.textContent = `${program.name}: ${usage.size.toFixed(0)} KB`;
-            
             bar.addEventListener('mouseenter', () => {
                 tooltip.style.opacity = '1';
                 tooltip.style.left = `${xPos + barWidth/2}px`;
                 tooltip.style.top = `${currentY - programHeight - 30}px`;
             });
-            
             bar.addEventListener('mousemove', (e) => {
                 tooltip.style.left = `${e.clientX - graphContainer.getBoundingClientRect().left + 10}px`;
                 tooltip.style.top = `${e.clientY - graphContainer.getBoundingClientRect().top - 30}px`;
             });
-            
             bar.addEventListener('mouseleave', () => {
                 tooltip.style.opacity = '0';
             });
-            
             graphContent.appendChild(bar);
             graphContent.appendChild(tooltip);
-            
             currentY -= programHeight;
         });
     }
-    
-    // Línea de memoria total
     const totalLine = document.createElement('div');
     totalLine.className = 'graph-line';
     totalLine.style.bottom = `${margin.top}px`;
     totalLine.style.left = `${margin.left}px`;
     totalLine.style.width = `${graphWidth}px`;
     graphContent.appendChild(totalLine);
-    
-    // Etiqueta para memoria total
     const totalLabel = document.createElement('div');
     totalLabel.className = 'graph-labels';
     totalLabel.textContent = 'Memoria Total (16 MiB)';

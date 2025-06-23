@@ -388,38 +388,43 @@ class VariableSizeMemoryManager extends MemoryManager {
     allocate(program) {
         const sizeKB = program.size;
         const sizeBytes = sizeKB * 1024;
-        
+
         let candidates = this.partitions
             .filter(p => !p.program && (p.end - p.start + 1) >= sizeBytes);
-        
+
         if (candidates.length === 0) {
             alert(`No hay suficiente memoria contigua disponible para ${program.name} (${sizeKB} KB)`);
             return false;
         }
-        
+
         let partitionToAllocate = null;
-        
-        switch (this.allocationAlgorithm) {
-            case 'first-fit':
-                partitionToAllocate = candidates[0];
-                break;
-            case 'best-fit':
-                candidates.sort((a, b) => 
-                    (a.end - a.start + 1) - (b.end - b.start + 1));
-                partitionToAllocate = candidates[0];
-                break;
-            case 'worst-fit':
-                candidates.sort((a, b) => 
-                    (b.end - b.start + 1) - (a.end - a.start + 1));
-                partitionToAllocate = candidates[0];
-                break;
+
+        // Si es el OS, siempre asignar a la primera partición libre adecuada
+        if (program.name === "O.S") {
+            partitionToAllocate = candidates[0];
+        } else {
+            switch (this.allocationAlgorithm) {
+                case 'first-fit':
+                    partitionToAllocate = candidates[0];
+                    break;
+                case 'best-fit':
+                    candidates.sort((a, b) => 
+                        (a.end - a.start + 1) - (b.end - b.start + 1));
+                    partitionToAllocate = candidates[0];
+                    break;
+                case 'worst-fit':
+                    candidates.sort((a, b) => 
+                        (b.end - b.start + 1) - (a.end - a.start + 1));
+                    partitionToAllocate = candidates[0];
+                    break;
+            }
         }
-        
+
         if (partitionToAllocate) {
             partitionToAllocate.program = program;
             return true;
         }
-        
+
         return false;
     }
     
@@ -1074,6 +1079,7 @@ function applyConfiguration() {
 function updateProgramTimeMatrix() {
     const container = document.getElementById('programTimeMatrix');
     container.innerHTML = ''; 
+    
     
     if (programs.length === 0) {
         container.textContent = "No hay programas para mostrar.";

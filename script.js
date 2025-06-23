@@ -9,7 +9,6 @@ const PROGRAM_COLORS = [
 let pendingPrograms = []; // cola de espera
 let queuedProgramIds = []; // IDs de programas que están en cola
 
-
 let memoryManager = null;
 let programs = [];
 let currentTime = 0;
@@ -97,31 +96,30 @@ class MemoryManager {
     
             tag.innerHTML = `<span>${program.name} (${program.size} KB)</span>`;
 
-if (!program.protected) {
-    const queueButton = document.createElement('button');
-    queueButton.className = 'btn-queue';
-    queueButton.textContent = isQueued ? '✔️ En Cola' : '➕ A Cola';
-    queueButton.addEventListener('click', () => {
-        if (!isQueued) {
-            queuedProgramIds.push(program.id);
-            memoryManager.updateProgramList();
-        }
-    });
-    tag.appendChild(queueButton);
+            if (!program.protected) {
+                const queueButton = document.createElement('button');
+                queueButton.className = 'btn-queue';
+                queueButton.textContent = isQueued ? '✔️ En Cola' : '➕ A Cola';
+                queueButton.addEventListener('click', () => {
+                    if (!isQueued) {
+                        queuedProgramIds.push(program.id);
+                        memoryManager.updateProgramList();
+                    }
+                });
+                tag.appendChild(queueButton);
 
-    const deleteButton = document.createElement('button');
-    deleteButton.className = 'btn-delete';
-    deleteButton.textContent = '🗑️';
-    deleteButton.addEventListener('click', () => {
-        memoryManager.deallocate(program.id);
-        programs = programs.filter(p => p.id !== program.id);
-        queuedProgramIds = queuedProgramIds.filter(id => id !== program.id);
-        memoryManager.updateProgramList();
-        memoryManager.updateAll();
-    });
-    tag.appendChild(deleteButton);
-}
-
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'btn-delete';
+                deleteButton.textContent = '🗑️';
+                deleteButton.addEventListener('click', () => {
+                    memoryManager.deallocate(program.id);
+                    programs = programs.filter(p => p.id !== program.id);
+                    queuedProgramIds = queuedProgramIds.filter(id => id !== program.id);
+                    memoryManager.updateProgramList();
+                    memoryManager.updateAll();
+                });
+                tag.appendChild(deleteButton);
+            }
     
             programList.appendChild(tag);
         });
@@ -215,12 +213,12 @@ if (!program.protected) {
             // 1) Liberar automáticamente los procesos que ya no están activos en este 'time'
             programs.forEach(prog => {
                 if (!prog.activeTimes.includes(time) && this.isAllocated(prog.id)) {
-                    this.deallocate(prog.id); // ✔️ Libera si no está activo
+                    this.deallocate(prog.id);
                 }
             });
             programs.forEach(prog => {
                 if (prog.activeTimes.includes(time) && !this.isAllocated(prog.id)) {
-                    this.allocate(prog); // ✔️ Carga si está activo
+                    this.allocate(prog);
                 }
             });
             
@@ -708,6 +706,250 @@ class PagingMemoryManager extends MemoryManager {
     }
 }
 
+// Clase para Segmentación
+class SegmentationMemoryManager extends MemoryManager {
+    constructor(allocationAlgorithm = 'first-fit') {
+        super(allocationAlgorithm);
+        this.segments = []; // Lista de segmentos en memoria física
+        this.segmentTables = {}; // Tabla de segmentos por programa
+        this.initializeMemory();
+    }
+
+    initializeMemory() {
+        this.segments = [{
+            start: 0,
+            end: TOTAL_MEMORY - 1,
+            program: null
+        }];
+        this.segmentTables = {};
+    }
+
+    allocate(program) {
+        // Para simular segmentos, dividimos el programa en segmentos lógicos
+        const segments = this.splitProgramIntoSegments(program);
+        let allocatedSegments = [];
+
+        // Intentar asignar cada segmento
+        for (const segment of segments) {
+            const sizeBytes = segment.size * 1024;
+            let freeSegments = this.segments
+                .map((seg, idx) => ({ ...seg, idx }))
+                .filter(seg => !seg.program && (seg.end - seg.start + 1) >= sizeBytes);
+
+            if (freeSegments.length === 0) {
+                alert(`No hay suficiente memoria para el segmento de ${program.name}`);
+                // Liberar segmentos ya asignados
+                allocatedSegments.forEach(seg => this.deallocateSegment(seg));
+                return false;
+            }
+
+            // Seleccionar segmento según algoritmo
+            let selected = null;
+            switch (this.allocationAlgorithm) {
+                case 'best-fit':
+                    freeSegments.sort((a, b) => (a.end - a.start) - (b.end - b.start));
+                    selected = freeSegments[0];
+                    break;
+                case 'worst-fit':
+                    freeSegments.sort((a, b) => (b.end - b.start) - (a.end - a.start));
+                    selected = freeSegments[0];
+                    break;
+                default: // first-fit
+                    selected = freeSegments[0];
+                    break;
+            }
+
+            const segIdx = selected.idx;
+            const seg = this.segments[segIdx];
+            const allocatedEnd = seg.start + sizeBytes - 1;
+
+            // Crear nuevo segmento asignado
+            const allocatedSegment = {
+                start: seg.start,
+                end: allocatedEnd,
+                program: program,
+                segmentName: segment.name
+            };
+
+            // Actualizar el segmento libre original
+            if (allocatedEnd < seg.end) {
+                seg.start = allocatedEnd + 1;
+            } else {
+                // Eliminar el segmento libre si se usó completamente
+                this.segments.splice(segIdx, 1);
+            }
+
+            // Insertar el nuevo segmento asignado
+            this.segments.splice(segIdx, 0, allocatedSegment);
+            allocatedSegments.push(allocatedSegment);
+        }
+
+        // Registrar en tabla de segmentos
+        this.segmentTables[program.id] = allocatedSegments.map(seg => ({
+            name: seg.segmentName,
+            base: seg.start,
+            limit: seg.end - seg.start + 1,
+            sizeKB: (seg.end - seg.start + 1) / 1024
+        }));
+
+        return true;
+    }
+
+    deallocate(programId) {
+        // Liberar todos los segmentos del programa
+        for (let i = 0; i < this.segments.length; i++) {
+            if (this.segments[i].program && this.segments[i].program.id === programId) {
+                // Convertir a segmento libre
+                this.segments[i].program = null;
+                this.segments[i].segmentName = null;
+            }
+        }
+
+        // Fusionar segmentos libres adyacentes
+        this.mergeAdjacentFreeSegments();
+
+        // Eliminar tabla de segmentos
+        delete this.segmentTables[programId];
+
+        return true;
+    }
+
+    splitProgramIntoSegments(program) {
+        // Simular diferentes tipos de segmentos para el programa
+        const segmentTypes = [
+            { name: "Código", percentage: 0.4 },
+            { name: "Datos", percentage: 0.3 },
+            { name: "Pila", percentage: 0.2 },
+            { name: "Heap", percentage: 0.1 }
+        ];
+
+        let segments = [];
+        let remaining = program.size;
+
+        for (let i = 0; i < segmentTypes.length; i++) {
+            let size = 0;
+            if (i === segmentTypes.length - 1) {
+                size = remaining; // El último segmento toma el resto
+            } else {
+                size = Math.round(program.size * segmentTypes[i].percentage);
+                remaining -= size;
+            }
+
+            if (size > 0) {
+                segments.push({
+                    name: `${program.name} - ${segmentTypes[i].name}`,
+                    size: size
+                });
+            }
+        }
+
+        return segments;
+    }
+
+    mergeAdjacentFreeSegments() {
+        for (let i = 0; i < this.segments.length - 1; i++) {
+            const current = this.segments[i];
+            const next = this.segments[i + 1];
+
+            if (!current.program && !next.program) {
+                // Fusionar segmentos libres adyacentes
+                current.end = next.end;
+                this.segments.splice(i + 1, 1);
+                i--; // Revisar el mismo índice de nuevo
+            }
+        }
+    }
+
+    getMemoryTableData(time) {
+        return this.segments.map(segment => {
+            const sizeKB = (segment.end - segment.start + 1) / 1024;
+            let programName = '-';
+            let status = 'Libre';
+            let segmentName = '-';
+            
+            if (segment.program) {
+                programName = segment.program.name;
+                segmentName = segment.segmentName || 'Segmento';
+                
+                // Verificar si el programa está activo en este tiempo
+                if (segment.program.activeTimes.includes(time)) {
+                    status = 'Ocupado';
+                } else {
+                    status = 'Inactivo';
+                }
+            }
+            
+            return {
+                start: segment.start,
+                end: segment.end,
+                size: sizeKB,
+                status,
+                program: programName,
+                segment: segmentName
+            };
+        });
+    }
+
+    updateSegmentTables() {
+        const panel = document.getElementById('segmentationPanel');
+        if (!panel) return;
+        
+        if (document.getElementById('memoryType').value !== 'segmentation') {
+            panel.style.display = 'none';
+            return;
+        }
+        
+        panel.style.display = '';
+        const segmentTablesDiv = document.getElementById('segmentTables');
+        segmentTablesDiv.innerHTML = '';
+        
+        for (const pid in this.segmentTables) {
+            const prog = programs.find(p => p.id == pid);
+            if (!prog) continue;
+            
+            const tableDiv = document.createElement('div');
+            tableDiv.className = 'segment-table';
+            
+            const header = document.createElement('h3');
+            header.textContent = `${prog.name} - Tabla de Segmentos`;
+            tableDiv.appendChild(header);
+            
+            this.segmentTables[pid].forEach(segment => {
+                const row = document.createElement('div');
+                row.className = 'segment-row';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'segment-name';
+                nameSpan.textContent = segment.name;
+                
+                const baseSpan = document.createElement('span');
+                baseSpan.className = 'segment-address';
+                baseSpan.textContent = `0x${segment.base.toString(16).padStart(6, '0').toUpperCase()}`;
+                
+                const sizeSpan = document.createElement('span');
+                sizeSpan.textContent = `${segment.sizeKB.toFixed(1)} KB`;
+                
+                row.appendChild(nameSpan);
+                row.appendChild(baseSpan);
+                row.appendChild(sizeSpan);
+                
+                tableDiv.appendChild(row);
+            });
+            
+            segmentTablesDiv.appendChild(tableDiv);
+        }
+        
+        if (Object.keys(this.segmentTables).length === 0) {
+            segmentTablesDiv.innerHTML = '<p>No hay programas cargados con segmentos</p>';
+        }
+    }
+
+    updateForTime(time) {
+        super.updateForTime(time);
+        this.updateSegmentTables();
+    }
+}
+
 // Funciones para interacción
 
 function addProgram() {
@@ -730,16 +972,7 @@ function addProgram() {
 
 function addRandomProgram() {
     const randomSize = Math.floor(Math.random() * 4096) + 128;
-    let times = [];
-    for (let i = 1; i <= 6; i++) {
-        if (Math.random() > 0.5) times.push(i);
-    }
-    if (times.length === 0) times = [1]; // al menos uno
-
     document.getElementById('programSize').value = randomSize;
-    if (document.getElementById('activeTimesInput')) {
-        document.getElementById('activeTimesInput').value = times.join(',');
-    }
     addProgram();
 }
 
@@ -768,6 +1001,9 @@ function applyConfiguration() {
             const pageSize = parseInt(document.getElementById('pageSize').value);
             memoryManager = new PagingMemoryManager(pageSize);
             break;
+        case 'segmentation':
+            memoryManager = new SegmentationMemoryManager(algorithm);
+            break;
     }
 
     // Reasignar programas existentes
@@ -778,14 +1014,6 @@ function applyConfiguration() {
     programs.push(program);
     });
 
-    memoryManager.updateAll();
-}
-
-function removeAllPrograms() {
-    programs.forEach(program => {
-        memoryManager.deallocate(program.id);
-    });
-    programs = [];
     memoryManager.updateAll();
 }
 
@@ -1015,6 +1243,12 @@ document.addEventListener('DOMContentLoaded', function() {
             (type === 'fixed') ? 'block' : 'none';
         document.getElementById('variableParams').style.display = 
             (type === 'variable') ? 'block' : 'none';
+        document.getElementById('pagingParams').style.display = 
+            (type === 'paging') ? 'block' : 'none';
+        document.getElementById('pagingPanel').style.display = 
+            (type === 'paging') ? '' : 'none';
+        document.getElementById('segmentationPanel').style.display = 
+            (type === 'segmentation') ? '' : 'none';
     });
 
     document.getElementById('applyConfig').addEventListener('click', applyConfiguration);
@@ -1051,45 +1285,11 @@ document.addEventListener('DOMContentLoaded', function() {
     memoryManager.updateProgramList();
 });
 
-function queueProgram() {
-    const size = parseInt(document.getElementById('programSize').value);
-    if (isNaN(size)) return;
-
-    const id = programs.length + pendingPrograms.length + 1;
-    const program = {
-        id,
-        name: `Programa ${id}`,
-        size,
-        activeTimes: [] // aún no asignado
-    };
-    pendingPrograms.push(program);
-    updatePendingList();
-}
-
-
-function updatePendingList() {
-    const container = document.getElementById('pendingList');
-    container.innerHTML = '';
-    pendingPrograms.forEach(program => {
-        const div = document.createElement('div');
-        div.className = 'program-tag';
-        div.style.backgroundColor = memoryManager.getProgramColor(program.id);
-        div.innerHTML = `<span>${program.name} (${program.size} KB)</span>
-                         <button data-id="${program.id}">X</button>`;
-        div.querySelector('button').addEventListener('click', () => {
-            pendingPrograms = pendingPrograms.filter(p => p.id !== program.id);
-            updatePendingList();
-        });
-        container.appendChild(div);
-    });
-}
-
 function simulateStep() {
     if (queuedProgramIds.length === 0) return;
 
     currentTime++;
     MAX_TIME = currentTime;
-
 
     const osProgram = programs.find(p => p.name === "O.S");
     if (osProgram && !osProgram.activeTimes.includes(currentTime)) {

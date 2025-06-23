@@ -5,6 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Simulador de Gestión de Memoria</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Estilos para segmentación */
+        .segment-tables {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .segment-table {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            min-width: 250px;
+        }
+        
+        .segment-table h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+            color: #2c3e50;
+        }
+        
+        .segment-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .segment-row:last-child {
+            border-bottom: none;
+        }
+        
+        .segment-name {
+            font-weight: bold;
+        }
+        
+        .segment-address {
+            font-family: monospace;
+        }
+    </style>
 </head>
 <body>
     <h1>Simulador de Gestión de Memoria</h1>
@@ -21,7 +64,7 @@
                         <option value="dynamic">Particiones dinámicas sin compactación</option>
                         <option value="dynamic-compact">Particiones dinámicas con compactación</option>
                         <option value="paging">Paginación</option>
-
+                        <option value="segmentation">Segmentación</option>
                     </select>
                 </div>
                 
@@ -51,11 +94,15 @@
             </div>
         </div>
 
-        <!-- Panel para tablas de páginas y marcos de página (Paginación) -->
         <div class="panel" id="pagingPanel" style="display:none;">
             <h2>Paginación: Tablas de Páginas y Marcos de Página</h2>
             <div id="framesStatus" class="frames-status"></div>
             <div id="pageTables" class="page-tables"></div>
+        </div>
+        
+        <div class="panel" id="segmentationPanel" style="display:none;">
+            <h2>Segmentación: Tablas de Segmentos</h2>
+            <div id="segmentTables" class="segment-tables"></div>
         </div>
 
         <div class="panel">
@@ -72,9 +119,7 @@
                 <div id="pendingList" class="program-list"></div>
             </div>
 
-            <div id="programList" class="program-list">
-                <!-- Aquí se mostrarán los programas -->
-            </div>
+            <div id="programList" class="program-list"></div>
         </div>
 
         <div class="panel">
@@ -135,7 +180,6 @@
             </table>
         </div>
         
-        <!-- Nuevo panel para la gráfica de uso de memoria -->
         <div class="panel">
             <h2>Uso de Memoria a lo largo del Tiempo</h2>
             <div class="usage-graph-container">
@@ -152,17 +196,5 @@
     </div>
 
     <script src="script.js"></script>
-    <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Mostrar/ocultar campos según el método de gestión seleccionado
-    document.getElementById('memoryType').addEventListener('change', function() {
-        const type = this.value;
-        document.getElementById('fixedParams').style.display = (type === 'fixed') ? '' : 'none';
-        document.getElementById('variableParams').style.display = (type === 'variable') ? '' : 'none';
-        document.getElementById('pagingParams').style.display = (type === 'paging') ? '' : 'none';
-        document.getElementById('pagingPanel').style.display = (type === 'paging') ? '' : 'none';
-    });
-});
-</script>
 </body>
 </html>

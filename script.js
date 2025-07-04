@@ -1063,6 +1063,10 @@ function applyConfiguration() {
         case 'segmentation':
             memoryManager = new SegmentationMemoryManager(algorithm);
             break;
+
+        case 'segmented-paging':
+            memoryManager = new SegmentedPagingMemoryManager();
+            break;    
     }
 
     // Reasignar programas existentes
@@ -1344,6 +1348,204 @@ document.addEventListener('DOMContentLoaded', function() {
     applyConfiguration();
     memoryManager.updateProgramList();
 });
+
+
+class SegmentedPagingMemoryManager extends MemoryManager {
+    constructor() {
+        super('segmented-paging');
+        this.frameSizeKB = 256;
+        this.frameSizeBytes = this.frameSizeKB * 1024;
+        this.numFrames = Math.floor(TOTAL_MEMORY / this.frameSizeBytes);
+        this.frames = Array(this.numFrames).fill(null); // Cada marco tiene { programId, segment, page }
+        this.segmentPageTables = {}; // { programId: { segmentName: [frameIndex, ...] } }
+        this.initializeMemory();
+    }
+
+    initializeMemory() {
+        this.frames = Array(this.numFrames).fill(null);
+        this.segmentPageTables = {};
+        this.partitions = []; // No se usa directamente
+    }
+
+    allocate(program) {
+        const segments = this.splitIntoSegments(program);
+        const allocation = {};
+        const usedFrames = new Set();
+    
+        for (const segment of segments) {
+            const numPages = Math.ceil(segment.size / this.frameSizeKB);
+            allocation[segment.name] = [];
+    
+            for (let p = 0; p < numPages; p++) {
+                // Buscar marcos disponibles que aún no estén usados por este allocate
+                const freeIndexes = this.frames
+                    .map((frame, index) => (frame === null && !usedFrames.has(index)) ? index : null)
+                    .filter(index => index !== null);
+    
+                if (freeIndexes.length === 0) {
+                    alert(`No hay marcos suficientes para ${segment.name} de ${program.name}`);
+                    return false;
+                }
+    
+                // Si el programa es "O.S", usar el primero disponible (orden ascendente)
+                const selectedIndex = (program.name === "O.S")
+                    ? freeIndexes[0]
+                    : freeIndexes[Math.floor(Math.random() * freeIndexes.length)];
+    
+                this.frames[selectedIndex] = {
+                    programId: program.id,
+                    segment: segment.name,
+                    page: p
+                };
+    
+                allocation[segment.name].push(selectedIndex);
+                usedFrames.add(selectedIndex);
+            }
+        }
+    
+        this.segmentPageTables[program.id] = allocation;
+        return true;
+    }
+
+    deallocate(programId) {
+        for (let i = 0; i < this.frames.length; i++) {
+            const frame = this.frames[i];
+            if (frame && frame.programId === programId) {
+                this.frames[i] = null;
+            }
+        }
+        delete this.segmentPageTables[programId];
+        return true;
+    }
+
+    splitIntoSegments(program) {
+        const sizes = [0.4, 0.3, 0.2, 0.1];
+        const names = ["Código", "Datos", "Pila", "Heap"];
+        let remaining = program.size;
+        const segments = [];
+
+        for (let i = 0; i < sizes.length; i++) {
+            let segSize = i === sizes.length - 1 ? remaining : Math.round(program.size * sizes[i]);
+            remaining -= segSize;
+            if (segSize > 0) {
+                segments.push({
+                    name: names[i],
+                    size: segSize
+                });
+            }
+        }
+
+        return segments;
+    }
+
+    getMemoryTableData(time) {
+        return this.frames.map((frame, i) => {
+            let program = "-", status = "Libre", segment = "-";
+            if (frame) {
+                const prog = programs.find(p => p.id === frame.programId);
+                if (prog) {
+                    const active = prog.activeTimes.includes(time);
+                    status = active ? "Ocupado" : "Inactivo";
+                    program = prog.name;
+                    segment = frame.segment + ` (Pág. ${frame.page})`;
+                }
+            }
+            return {
+                start: i * this.frameSizeBytes,
+                end: (i + 1) * this.frameSizeBytes - 1,
+                size: this.frameSizeKB,
+                status,
+                program: program,
+                segment
+            };
+        });
+    }
+
+    updateForTime(time) {
+        this.visualizeMemory(time);
+        this.updateMemoryTable(time);
+        this.updateStats(time);
+        this.updateSegmentedPagingPanel();
+    }
+
+    updateAll() {
+        this.initializeMemory();
+        for (let time = 1; time <= MAX_TIME; time++) {
+            programs.forEach(p => {
+                if (p.activeTimes.includes(time)) this.allocate(p);
+                else this.deallocate(p.id);
+            });
+            memorySnapshots[time] = JSON.parse(JSON.stringify({
+                frames: this.frames,
+                segmentPageTables: this.segmentPageTables,
+                stats: this.calculateStats(time)
+            }));
+        }
+        this.updateForTime(currentTime);
+        updateUsageGraph();
+    }
+
+    updateSegmentedPagingPanel() {
+        const panel = document.getElementById('segmentedPagingPanel');
+        if (!panel) return;
+    
+        const memoryType = document.getElementById('memoryType').value;
+    
+        if (memoryType !== 'segmented-paging') {
+            panel.style.display = 'none';
+            document.getElementById('programTimeMatrix').style.display = ''; // mostrar si no es segmentación paginada
+            return;
+        }
+    
+        panel.style.display = '';
+        document.getElementById('programTimeMatrix').style.display = 'none'; // ocultar solo en segmentación paginada
+    
+        const content = document.getElementById('segmentedPagingTables');
+        content.innerHTML = '';
+    
+        for (const pid in this.segmentPageTables) {
+            const prog = programs.find(p => p.id == pid);
+            if (!prog) continue;
+    
+            const div = document.createElement('div');
+            div.className = 'segment-table';
+            div.style.display = 'inline-block';
+            div.style.marginRight = '12px';
+            div.style.backgroundColor = this.getProgramColor(prog.id);
+            div.style.color = '#fff';
+            div.style.border = '2px solid #333';
+            div.style.borderRadius = '8px';
+            div.style.padding = '10px';
+            div.style.minWidth = '220px';
+    
+            const header = document.createElement('h3');
+            header.textContent = `${prog.name} - Tabla de Segmentos Paginados`;
+            header.style.marginTop = '0';
+            header.style.fontSize = '15px';
+            header.style.borderBottom = '1px solid rgba(255,255,255,0.3)';
+            header.style.paddingBottom = '5px';
+            div.appendChild(header);
+    
+            for (const segment in this.segmentPageTables[pid]) {
+                const frames = this.segmentPageTables[pid][segment];
+                frames.forEach((frame, i) => {
+                    const row = document.createElement('div');
+                    row.className = 'segment-row';
+                    row.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
+                    row.style.padding = '4px 0';
+                    row.innerHTML = `
+                        <span class="segment-name">${segment}</span>
+                        <span class="segment-address">Página ${i}</span>
+                        <span class="segment-address">Marco 0x${frame.toString(16).padStart(2, '0').toUpperCase()}</span>
+                    `;
+                    div.appendChild(row);
+                });
+            }
+    
+            content.appendChild(div);
+        }
+    }
+}
 
 function simulateStep() {
     if (queuedProgramIds.length === 0) return;

@@ -102,8 +102,27 @@ class MemoryManager {
                 queueButton.textContent = isQueued ? '✔️ En Cola' : '➕ A Cola';
                 queueButton.addEventListener('click', () => {
                     if (!isQueued) {
+                        // Si el tiempo actual es 0, inicializarlo a 1
+                        if (currentTime < 1) {
+                            currentTime = 1;
+                            MAX_TIME = 1;
+                        }
+                        // Activar el programa para el tiempo actual
+                        program.activeTimes.push(currentTime);
                         queuedProgramIds.push(program.id);
+                        // Asegurar que el OS esté activo
+                        const osProgram = programs.find(p => p.name === "O.S");
+                        if (osProgram && !osProgram.activeTimes.includes(currentTime)) {
+                            osProgram.activeTimes.push(currentTime);
+                            memoryManager.allocate(osProgram);
+                        }
+                        // Asignar el programa y actualizar
+                        memoryManager.allocate(program);
+                        memoryManager.updateAll();
                         memoryManager.updateProgramList();
+                        document.getElementById('timeSlider').max = MAX_TIME;
+                        document.getElementById('timeSlider').value = currentTime;
+                        document.getElementById('currentTime').textContent = currentTime;
                     }
                 });
                 tag.appendChild(queueButton);
@@ -112,6 +131,7 @@ class MemoryManager {
                 deleteButton.className = 'btn-delete';
                 deleteButton.textContent = '🗑️';
                 deleteButton.addEventListener('click', () => {
+                    // Al eliminar, quitar de la cola y de memoria
                     memoryManager.deallocate(program.id);
                     programs = programs.filter(p => p.id !== program.id);
                     queuedProgramIds = queuedProgramIds.filter(id => id !== program.id);
@@ -1318,8 +1338,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('applyConfig').addEventListener('click', applyConfiguration);
     document.getElementById('addProgram').addEventListener('click', addProgram);
     document.getElementById('addRandomProgram').addEventListener('click', addRandomProgram);
-    document.getElementById('simulateStep').addEventListener('click', simulateStep);
-    
+    // Ocultar el botón de simular si existe
+    const simulateBtn = document.getElementById('simulateStep');
+    if (simulateBtn) simulateBtn.style.display = 'none';
     // Control de tiempo
     document.getElementById('timeSlider').addEventListener('input', function() {
         changeTime(parseInt(this.value));

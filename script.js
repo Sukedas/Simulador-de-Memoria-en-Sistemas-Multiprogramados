@@ -1526,17 +1526,25 @@ class SegmentedPagingMemoryManager extends MemoryManager {
             header.style.paddingBottom = '5px';
             div.appendChild(header);
     
+            // Obtener los tamaños de los segmentos
+            const segmentSizes = {};
+            this.splitIntoSegments(prog).forEach(seg => {
+                segmentSizes[seg.name] = seg.size;
+            });
+    
             for (const segment in this.segmentPageTables[pid]) {
                 const frames = this.segmentPageTables[pid][segment];
+                const segmentSize = segmentSizes[segment] || 0;
                 frames.forEach((frame, i) => {
                     const row = document.createElement('div');
                     row.className = 'segment-row';
                     row.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
-                    row.style.padding = '4px 0';
+                    row.style.padding = '5px 0';
                     row.innerHTML = `
                         <span class="segment-name">${segment}</span>
                         <span class="segment-address">Página ${i}</span>
                         <span class="segment-address">Marco 0x${frame.toString(16).padStart(2, '0').toUpperCase()}</span>
+                        <span class="segment-size">${i === 0 ? segmentSize + ' KB' : ''}</span>
                     `;
                     div.appendChild(row);
                 });
